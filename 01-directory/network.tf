@@ -12,7 +12,7 @@ resource "google_compute_network" "ad_vpc" {
   # Disables automatic subnet creation.
   # In "auto mode" GCP would create one subnet per region, with pre-defined CIDR ranges.
   # We don't want that here — we want to explicitly define our own subnets (custom mode).
-  
+
   auto_create_subnetworks = false
 }
 
@@ -61,7 +61,7 @@ resource "google_compute_router_nat" "ad_nat" {
   router = google_compute_router.ad_router.name
   region = google_compute_router.ad_router.region
 
-  nat_ip_allocate_option             = "AUTO_ONLY" 
+  nat_ip_allocate_option             = "AUTO_ONLY"
   source_subnetwork_ip_ranges_to_nat = "ALL_SUBNETWORKS_ALL_IP_RANGES"
 
   log_config {

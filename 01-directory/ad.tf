@@ -20,10 +20,9 @@ module "mini_ad" {
   email             = local.service_account_email            # Service account email
 
   # Ensure NAT + route association exist before bootstrapping (for package repos, etc.)
-  depends_on = [
-    aws_nat_gateway.ad_nat,
-    aws_route_table_association.rt_assoc_ad_private
-  ]
+  depends_on = [google_compute_subnetwork.ad_subnet,
+    google_compute_router.ad_router,
+  google_compute_router_nat.ad_nat]
 }
 
 # ==========================================================================================

@@ -17,7 +17,7 @@ resource "google_secret_manager_secret" "admin_secret" {
 }
 
 resource "google_secret_manager_secret_version" "admin_secret_version" {
-  secret      = google_secret_manager_secret.admin_secret.id
+  secret = google_secret_manager_secret.admin_secret.id
   secret_data = jsonencode({
     username = "MCLOUD\\admin"
     password = random_password.admin_password.result
@@ -43,7 +43,7 @@ resource "google_secret_manager_secret" "jsmith_secret" {
 }
 
 resource "google_secret_manager_secret_version" "jsmith_secret_version" {
-  secret      = google_secret_manager_secret.jsmith_secret.id
+  secret = google_secret_manager_secret.jsmith_secret.id
   secret_data = jsonencode({
     username = "MCLOUD\\jsmith"
     password = random_password.jsmith_password.result
@@ -69,7 +69,7 @@ resource "google_secret_manager_secret" "edavis_secret" {
 }
 
 resource "google_secret_manager_secret_version" "edavis_secret_version" {
-  secret      = google_secret_manager_secret.edavis_secret.id
+  secret = google_secret_manager_secret.edavis_secret.id
   secret_data = jsonencode({
     username = "MCLOUD\\edavis"
     password = random_password.edavis_password.result
@@ -95,7 +95,7 @@ resource "google_secret_manager_secret" "rpatel_secret" {
 }
 
 resource "google_secret_manager_secret_version" "rpatel_secret_version" {
-  secret      = google_secret_manager_secret.rpatel_secret.id
+  secret = google_secret_manager_secret.rpatel_secret.id
   secret_data = jsonencode({
     username = "MCLOUD\\rpatel"
     password = random_password.rpatel_password.result
@@ -121,7 +121,7 @@ resource "google_secret_manager_secret" "akumar_secret" {
 }
 
 resource "google_secret_manager_secret_version" "akumar_secret_version" {
-  secret      = google_secret_manager_secret.akumar_secret.id
+  secret = google_secret_manager_secret.akumar_secret.id
   secret_data = jsonencode({
     username = "MCLOUD\\akumar"
     password = random_password.akumar_password.result
@@ -140,7 +140,7 @@ locals {
 
 # Grant the service account access to all secrets
 resource "google_secret_manager_secret_iam_binding" "secret_access" {
-  for_each = toset(local.secrets) # Loop through each secret
+  for_each  = toset(local.secrets) # Loop through each secret
   secret_id = each.key
   role      = "roles/secretmanager.secretAccessor"
 

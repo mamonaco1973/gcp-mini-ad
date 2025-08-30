@@ -9,16 +9,16 @@
 
 resource "google_compute_firewall" "ad_ports" {
   name    = "ad-ports"
-  network = var.network    
+  network = var.network
   # Allow blocks for each AD service
   allow {
     protocol = "tcp"
-    ports    = ["22","53","88","135","389","445","443","464","636","3268","3269"]
+    ports    = ["22", "53", "88", "135", "389", "445", "443", "464", "636", "3268", "3269"]
   }
 
   allow {
     protocol = "udp"
-    ports    = ["53","88","389","464","123"]
+    ports    = ["53", "88", "389", "464", "123"]
   }
 
   # Ephemeral RPC high ports
@@ -30,8 +30,8 @@ resource "google_compute_firewall" "ad_ports" {
   # Outbound: allow all (default in GCP VPCs anyway)
   # No need to explicitly add unless you have custom deny rules.
 
-  source_ranges = ["0.0.0.0/0"]   # ← tighten in production
-  target_tags   = ["ad-dc"]       # Apply only to DC instances
+  source_ranges = ["0.0.0.0/0"] # ← tighten in production
+  target_tags   = ["ad-dc"]     # Apply only to DC instances
 }
 
 # ----------------------------------------------------
@@ -39,21 +39,21 @@ resource "google_compute_firewall" "ad_ports" {
 # ----------------------------------------------------
 
 resource "google_compute_instance" "mini_ad_dc_instance" {
-  
-  name         = "mini-ad-dc-${lower(var.netbios)}"
+
+  name = "mini-ad-dc-${lower(var.netbios)}"
 
   # Machine type defines CPU, memory, and price class.
   # `e2-micro` is small and cheap — perfect for testing.
-  
+
   machine_type = var.machine_type
 
   # Zone specifies the physical location where this VM lives.
   # Must match your network/subnet region.
-  
-  zone         = var.zone
+
+  zone = var.zone
 
   # --------- BOOT DISK: OS and root filesystem ---------
-  
+
   boot_disk {
     initialize_params {
       # Fetches the latest Ubuntu 24.04 LTS image dynamically.
@@ -62,22 +62,22 @@ resource "google_compute_instance" "mini_ad_dc_instance" {
   }
 
   # --------- NETWORK INTERFACE: Connect to VPC ---------
-  
+
   network_interface {
-    network    = var.network   # Attach to the `ad-vpc` network.
+    network    = var.network    # Attach to the `ad-vpc` network.
     subnetwork = var.subnetwork # Specifically attach to `ad-subnet` (in `us-central1`).
   }
 
   # --------- METADATA: Custom data passed to the VM ---------
   # Metadata can be read by the VM and used during startup.
   # This is often used to pass config values or trigger startup scripts.
-  
+
   metadata = {
-    enable-oslogin = "TRUE"  # Enable OS Login for secure SSH access.
+    enable-oslogin = "TRUE" # Enable OS Login for secure SSH access.
 
     # Inject a domain join script to configure the VM to join your AD domain at boot.
     # `templatefile()` allows you to pass variables into the script, like domain name and OU path.
-  
+
     startup-script = templatefile("${path.module}/scripts/mini-ad.sh.template", {
       HOSTNAME_DC        = "ad1"
       DNS_ZONE           = var.dns_zone
@@ -92,9 +92,9 @@ resource "google_compute_instance" "mini_ad_dc_instance" {
   # --------- SERVICE ACCOUNT: What permissions does the VM have? ---------
   # This attaches a service account to the VM to allow it to interact with GCP services.
   # The service account should have appropriate permissions (like joining domains).
-  
+
   service_account {
-    email  = var.email  # Email address of the service account to use.
+    email  = var.email                                          # Email address of the service account to use.
     scopes = ["https://www.googleapis.com/auth/cloud-platform"] # Full access to GCP APIs.
   }
 
@@ -103,9 +103,9 @@ resource "google_compute_instance" "mini_ad_dc_instance" {
 
   tags = ["ad-dc"]
 
-  depends_on = [ google_compute_subnetwork.ad_subnet,
-                 google_compute_router.ad_router,
-                 google_compute_router_nat.ad_nat]
+  depends_on = [google_compute_subnetwork.ad_subnet,
+    google_compute_router.ad_router,
+  google_compute_router_nat.ad_nat]
 }
 
 # -----------------------------------------------------
@@ -122,7 +122,7 @@ data "google_compute_image" "ubuntu_latest" {
 # Wait for AD DC provisioning (Samba/DNS startup)
 # Conservative 240s delay → adjust if bootstrap time differs.
 resource "time_sleep" "wait_for_mini_ad" {
-  depends_on      = [ google_compute_instance.mini_ad_dc_instance ]
+  depends_on      = [google_compute_instance.mini_ad_dc_instance]
   create_duration = "240s"
 }
 
