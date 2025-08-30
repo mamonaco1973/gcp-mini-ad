@@ -143,10 +143,10 @@ locals {
 
 
 # Wait for AD DC provisioning (Samba/DNS startup)
-# Conservative 180s delay → adjust if bootstrap time differs.
+# Conservative 240s delay → adjust if bootstrap time differs.
 resource "time_sleep" "wait_for_mini_ad" {
   depends_on      = [ google_compute_instance.mini_ad_dc_instance ]
-  create_duration = "180s"
+  create_duration = "240s"
 }
 
 resource "google_dns_managed_zone" "ad_forward_zone" {
