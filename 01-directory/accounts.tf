@@ -127,15 +127,6 @@ resource "google_secret_manager_secret_version" "akumar_secret_version" {
     password = random_password.akumar_password.result
   })
 }
-
-resource "google_secret_manager_secret" "admin_secret" {
-  secret_id = "admin-ad-credentials"
-
-  replication {
-    auto {}
-  }
-}
-
 # List of all secret IDs
 locals {
   secrets = [
