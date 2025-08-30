@@ -26,16 +26,6 @@ apt-get update >> /root/userdata.log 2>&1
 apt-get install -y samba krb5-user winbind smbclient dnsutils acl attr chrony unzip ldb-tools >> /root/userdata.log 2>&1
 
 #--------------------------------------------------------------------
-# Install Google Cloud CLI
-#--------------------------------------------------------------------
-
-echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" \
-    | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
-curl https://packages.cloud.google.com/apt/doc/apt-key.gpg \
-    | apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
-apt-get update && apt-get install -y google-cloud-sdk
-
-#--------------------------------------------------------------------
 # Prepare secrets file with restrictive permissions
 #--------------------------------------------------------------------
 SECRETS_FILE="/root/ad-secrets.txt"
@@ -60,9 +50,7 @@ hostnamectl set-hostname "$HOSTNAME_DC"
 #--------------------------------------------------------------------
 # Determine the primary private IPv4 address and update /etc/hosts
 #--------------------------------------------------------------------
-#IPV4=$(hostname -I | awk '{print $1}')
-IPV4=$(curl -s -H "Metadata-Flavor: Google" \
-  http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/ip)
+IPV4=$(hostname -I | awk '{print $1}')
 sed -i "/\b${HOSTNAME_DC}\b/d" /etc/hosts || true
 echo "$IPV4  ${HOSTNAME_DC}.${DNS_ZONE} ${HOSTNAME_DC}" >> /etc/hosts
 
