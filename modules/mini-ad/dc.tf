@@ -9,8 +9,7 @@
 
 resource "google_compute_firewall" "ad_ports" {
   name    = "ad-ports"
-  network = google_compute_network.ad_vpc.id   # Reference VPC by id, not string
-
+  network = var.network    
   # Allow blocks for each AD service
   allow {
     protocol = "tcp"
