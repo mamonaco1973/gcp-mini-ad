@@ -1,3 +1,29 @@
+# --- User: Admin ---
+
+# Generate a random password for Admin
+resource "random_password" "admin_password" {
+  length           = 24
+  special          = true
+  override_special = "-_."
+}
+
+# Create secret for Admin's credentials in GCP Secret Manager
+resource "google_secret_manager_secret" "admin_secret" {
+  secret_id = "admin-ad-credentials"
+
+  replication {
+    auto {}
+  }
+}
+
+resource "google_secret_manager_secret_version" "admin_secret_version" {
+  secret      = google_secret_manager_secret.admin_secret.id
+  secret_data = jsonencode({
+    username = "MCLOUD\\admin"
+    password = random_password.admin_password.result
+  })
+}
+
 # --- User: John Smith ---
 
 # Generate a random password for John Smith
