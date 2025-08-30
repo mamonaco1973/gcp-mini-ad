@@ -14,7 +14,7 @@ resource "google_compute_firewall" "ad_ports" {
   # Allow blocks for each AD service
   allow {
     protocol = "tcp"
-    ports    = ["53","88","135","389","445","443","464","636","3268","3269"]
+    ports    = ["22","53","88","135","389","445","443","464","636","3268","3269"]
   }
 
   allow {
