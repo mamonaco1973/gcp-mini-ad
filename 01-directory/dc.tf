@@ -141,6 +141,15 @@ locals {
   })
 }
 
+
+# Wait for AD DC provisioning (Samba/DNS startup)
+# Conservative 180s delay → adjust if bootstrap time differs.
+resource "time_sleep" "wait_for_mini_ad" {
+  depends_on      = [ google_compute_instance.mini_ad_dc_instance ]
+  create_duration = "180s"
+}
+
+
 resource "google_dns_managed_zone" "ad_private_zone" {
   name        = "${lower(var.netbios)}-zone"            # Terraform name
   dns_name    = "${lower(var.dns_zone)}."               # Your AD DNS domain (must end with a dot)
@@ -152,4 +161,27 @@ resource "google_dns_managed_zone" "ad_private_zone" {
       network_url = google_compute_network.ad_vpc.id
     }
   }
+
+  depends_on = [time_sleep.wait_for_mini_ad]
+}
+
+resource "google_dns_managed_zone" "ad_forward_zone" {
+  name        = "${lower(var.netbios)}-forward-zone"
+  dns_name    = "${lower(var.dns_zone)}."
+  description = "Forward zone for ${var.netbios}."
+  visibility  = "private"
+
+  forwarding_config {
+    target_name_servers {
+      ipv4_address = google_compute_instance.mini_ad_dc_instance.network_interface[0].network_ip
+    }
+  }
+
+  private_visibility_config {
+    networks {
+      network_url = google_compute_network.ad_vpc.id
+    }
+  }
+
+  depends_on = [ google_dns_managed_zone.ad_forward_zone ]
 }
