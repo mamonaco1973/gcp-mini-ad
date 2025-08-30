@@ -6,7 +6,7 @@ FLAG_FILE="/root/.ad_provisioned"
 #--------------------------------------------------------------------
 
 if [ -f "$FLAG_FILE" ]; then
-  echo "Provisioning already completed — skipping."
+  echo "Provisioning already completed — skipping." >> /root/userdata.log 2>&1
   exit 0
 fi
 
@@ -34,8 +34,12 @@ chmod 600 /root/seed_users.json
 #--------------------------------------------------------------------
 
 export DEBIAN_FRONTEND=noninteractive
-apt-get update >> /root/userdata.log 2>&1
-apt-get install -y samba krb5-user winbind smbclient dnsutils acl attr chrony unzip ldb-tools >> /root/userdata.log 2>&1
+
+apt-get -qq update >> /root/userdata.log 2>&1 
+apt-get install -y --no-install-recommends samba krb5-user winbind smbclient dnsutils acl attr chrony unzip ldb-tools jq >> /root/userdata.log 2>&1
+
+#apt-get update >> /root/userdata.log 2>&1
+#apt-get install -y samba krb5-user winbind smbclient dnsutils acl attr chrony unzip ldb-tools >> /root/userdata.log 2>&1
 
 #--------------------------------------------------------------------
 # Prepare secrets file with restrictive permissions
@@ -106,7 +110,7 @@ if [ ! -f /var/lib/samba/private/sam.ldb ]; then
     --server-role=dc \
     --dns-backend=SAMBA_INTERNAL \
     --host-name="${HOSTNAME_DC}" \
-    --adminpass="${ADMINISTRATOR_PASS}"
+    --adminpass="${ADMINISTRATOR_PASS}" >> /root/userdata.log 2>&1
 
   sed -i '/^\s*dns forwarder\s*=/d' /etc/samba/smb.conf
   sed -i '/^\[global\]/a dns forwarder = 169.254.169.254' /etc/samba/smb.conf
