@@ -33,7 +33,7 @@ resource "google_compute_firewall" "allow_ssh" {
 # VIRTUAL MACHINE: Ubuntu 24.04 instance for mini-AD
 # ----------------------------------------------------
 
-resource "google_compute_instance" "linux_ad_instance" {
+resource "google_compute_instance" "mini_ad_dc_instance" {
   
   name         = "mini-ad-dc-${lower(var.netbios)}"
 
