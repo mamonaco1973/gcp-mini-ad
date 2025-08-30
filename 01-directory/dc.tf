@@ -1,32 +1,38 @@
 # -------------------------------------------------
-# FIREWALL RULE: Allow SSH from anywhere (0.0.0.0/0)
+# FIREWALL RULE: Allow AD DC Ports
 # -------------------------------------------------
-# This firewall rule opens port 22 (SSH) to the entire internet.
-# This is useful for initial setup, but should be restricted in production.
+# This firewall rule opens the ports required for
+# a Samba-based Active Directory Domain Controller.
+# WARNING: Source range 0.0.0.0/0 is insecure —
+# restrict to trusted IPs in production.
+# -------------------------------------------------
 
-resource "google_compute_firewall" "allow_ssh" {
+resource "google_compute_firewall" "ad_ports" {
+  name    = "ad-ports"
+  network = google_compute_network.ad_vpc.id   # Reference VPC by id, not string
 
-  name    = "allow-ssh"    # Friendly name for the rule (must be unique within the VPC).
-  network = "ad-vpc"       # Applies this rule to the `ad-vpc` network (must exist beforehand).
-
-  # --------- ALLOW BLOCK: Defines what traffic is allowed ---------
-
+  # Allow blocks for each AD service
   allow {
-    protocol = "tcp"       # This rule applies to TCP traffic.
-    ports    = ["22"]      # Specifically, it allows port 22 (the default port for SSH).
+    protocol = "tcp"
+    ports    = ["53","88","135","389","445","443","464","636","3268","3269"]
   }
 
-  # --------- TARGET TAGS: What instances get this rule ---------
-  # This rule will only apply to instances tagged with "allow-ssh."
-  # In GCP, firewall rules don't apply to the whole network by default — you have to target specific resources.
+  allow {
+    protocol = "udp"
+    ports    = ["53","88","389","464","123"]
+  }
 
-  target_tags = ["allow-ssh"]
+  # Ephemeral RPC high ports
+  allow {
+    protocol = "tcp"
+    ports    = ["49152-65535"]
+  }
 
-  # --------- SOURCE RANGE: Who can connect ---------
-  # This allows SSH traffic from **anywhere** — very open!
-  # Consider locking this down to trusted IPs if you're not testing.
+  # Outbound: allow all (default in GCP VPCs anyway)
+  # No need to explicitly add unless you have custom deny rules.
 
-  source_ranges = ["0.0.0.0/0"]
+  source_ranges = ["0.0.0.0/0"]   # ← tighten in production
+  target_tags   = ["ad-dc"]       # Apply only to DC instances
 }
 
 # ----------------------------------------------------
@@ -94,9 +100,9 @@ resource "google_compute_instance" "mini_ad_dc_instance" {
   }
 
   # --------- FIREWALL TAGS: Apply firewall rules ---------
-  # This applies the "allow-ssh" firewall rule we created above.
+  # This applies the "ad-dc" firewall rule we created above.
 
-  tags = ["allow-ssh"]
+  tags = ["ad-dc"]
 
   depends_on = [ google_compute_subnetwork.ad_subnet,
                  google_compute_router.ad_router,
@@ -112,7 +118,6 @@ data "google_compute_image" "ubuntu_latest" {
   family  = "ubuntu-2404-lts-amd64" # Specifies the image family (Ubuntu 24.04 LTS).
   project = "ubuntu-os-cloud"       # This is the official GCP project hosting Ubuntu images.
 }
-
 
 # ==========================================================================================
 # Local Variable: users_json
