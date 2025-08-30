@@ -79,7 +79,7 @@ resource "google_compute_instance" "linux_ad_instance" {
       REALM              = var.realm
       NETBIOS            = var.netbios
       ADMINISTRATOR_PASS = random_password.admin_password.result
-      ADMIN_USER_PASS    = random_password.admin_user_password.result
+      ADMIN_USER_PASS    = random_password.admin_password.result
       USERS_JSON         = local.users_json
     })
   }
