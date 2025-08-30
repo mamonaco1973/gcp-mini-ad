@@ -1,7 +1,19 @@
 #!/bin/bash
+FLAG_FILE="/root/.ad_provisioned"
+
+#--------------------------------------------------------------------
+# Prevent infinite loop from happening.
+#--------------------------------------------------------------------
+
+if [ -f "$FLAG_FILE" ]; then
+  echo "Provisioning already completed — skipping."
+  exit 0
+fi
+
 #--------------------------------------------------------------------
 # Load configuration variables from environment
 #--------------------------------------------------------------------
+
 REALM="${REALM}"
 DNS_ZONE="${DNS_ZONE}"
 NETBIOS="${NETBIOS}"
@@ -263,4 +275,6 @@ done
 #--------------------------------------------------------------------
 # Reboot to ensure all changes are applied cleanly
 #--------------------------------------------------------------------
+
+touch "$FLAG_FILE"
 reboot
