@@ -36,7 +36,21 @@ chmod 600 /root/seed_users.json
 export DEBIAN_FRONTEND=noninteractive
 
 apt-get -qq update >> /root/userdata.log 2>&1 
-apt-get install -y --no-install-recommends samba krb5-user winbind smbclient dnsutils acl attr chrony unzip ldb-tools jq >> /root/userdata.log 2>&1
+apt-get install -y --no-install-recommends \
+  samba \
+  samba-dsdb-modules \
+  samba-vfs-modules \
+  samba-ad-provision \
+  krb5-user \
+  winbind \
+  smbclient \
+  dnsutils \
+  acl \
+  attr \
+  chrony \
+  unzip \
+  ldb-tools \
+  jq  >> /root/userdata.log 2>&1
 
 #apt-get update >> /root/userdata.log 2>&1
 #apt-get install -y samba krb5-user winbind smbclient dnsutils acl attr chrony unzip ldb-tools >> /root/userdata.log 2>&1
