@@ -102,10 +102,6 @@ resource "google_compute_instance" "mini_ad_dc_instance" {
   # This applies the "ad-dc" firewall rule we created above.
 
   tags = ["ad-dc"]
-
-  depends_on = [google_compute_subnetwork.ad_subnet,
-    google_compute_router.ad_router,
-  google_compute_router_nat.ad_nat]
 }
 
 # -----------------------------------------------------
