@@ -43,3 +43,29 @@ resource "google_compute_subnetwork" "ad_subnet" {
 
   ip_cidr_range = "10.1.0.0/24"
 }
+
+# ----------------------------------------------------
+# Cloud Router for the AD VPC
+# ----------------------------------------------------
+resource "google_compute_router" "ad_router" {
+  name    = "ad-router"
+  network = google_compute_network.ad_vpc.id
+  region  = "us-central1"
+}
+
+# ----------------------------------------------------
+# Cloud NAT for outbound internet (no public IP needed)
+# ----------------------------------------------------
+resource "google_compute_router_nat" "ad_nat" {
+  name   = "ad-nat"
+  router = google_compute_router.ad_router.name
+  region = google_compute_router.ad_router.region
+
+  nat_ip_allocate_option             = "AUTO_ONLY" 
+  source_subnetwork_ip_ranges_to_nat = "ALL_SUBNETWORKS_ALL_IP_RANGES"
+
+  log_config {
+    enable = true
+    filter = "ALL"
+  }
+}
