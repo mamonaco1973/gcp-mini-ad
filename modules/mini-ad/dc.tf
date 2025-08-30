@@ -136,7 +136,7 @@ resource "google_dns_managed_zone" "ad_forward_zone" {
 
   private_visibility_config {
     networks {
-      network_url = google_compute_network.ad_vpc.id
+      network_url = var.network
     }
   }
 
