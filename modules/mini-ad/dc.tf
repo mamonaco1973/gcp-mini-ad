@@ -83,8 +83,8 @@ resource "google_compute_instance" "mini_ad_dc_instance" {
       DNS_ZONE           = var.dns_zone
       REALM              = var.realm
       NETBIOS            = var.netbios
-      ADMINISTRATOR_PASS = random_password.admin_password.result
-      ADMIN_USER_PASS    = random_password.admin_password.result
+      ADMINISTRATOR_PASS = var.ad_admin_password
+      ADMIN_USER_PASS    = var.ad_admin_password
       USERS_JSON         = local.effective_users_json
     })
   }
