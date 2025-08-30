@@ -1,82 +1,83 @@
-# -------------------------------------------------
-# FIREWALL RULE: Allow AD DC Ports
-# -------------------------------------------------
-# This firewall rule opens the ports required for
-# a Samba-based Active Directory Domain Controller.
-# WARNING: Source range 0.0.0.0/0 is insecure —
-# restrict to trusted IPs in production.
-# -------------------------------------------------
+# ==========================================================================================
+# FIREWALL RULE: Active Directory Domain Controller Ports
+# ==========================================================================================
+# This firewall rule enables the network ports required by a Samba-based AD DC.
+# Notes:
+#   - Includes standard LDAP, Kerberos, DNS, SMB, and replication ports.
+#   - Ephemeral RPC ports (49152–65535) are also required for AD RPC operations.
+#   - Source range is currently set to 0.0.0.0/0 (world-open) for demo/testing only.
+#     In production, restrict source_ranges to trusted networks or peered VPCs.
+# ==========================================================================================
 
 resource "google_compute_firewall" "ad_ports" {
   name    = "ad-ports"
   network = var.network
-  # Allow blocks for each AD service
+
+  # Core TCP ports for AD services
   allow {
     protocol = "tcp"
     ports    = ["22", "53", "88", "135", "389", "445", "443", "464", "636", "3268", "3269"]
   }
 
+  # Core UDP ports for AD services
   allow {
     protocol = "udp"
-    ports    = ["53", "88", "389", "464", "123"]
+    ports    = ["53", "88", "389", "464", "123"] # NTP (123) is critical for Kerberos
   }
 
-  # Ephemeral RPC high ports
+  # High dynamic port range for RPC
   allow {
     protocol = "tcp"
     ports    = ["49152-65535"]
   }
 
-  # Outbound: allow all (default in GCP VPCs anyway)
-  # No need to explicitly add unless you have custom deny rules.
+  # Scope: currently world-open; restrict in production environments
+  source_ranges = ["0.0.0.0/0"]
 
-  source_ranges = ["0.0.0.0/0"] # ← tighten in production
-  target_tags   = ["ad-dc"]     # Apply only to DC instances
+  # Apply rule only to AD DC instances (by tag)
+  target_tags = ["ad-dc"]
 }
 
-# ----------------------------------------------------
-# VIRTUAL MACHINE: Ubuntu 24.04 instance for mini-AD
-# ----------------------------------------------------
+# ==========================================================================================
+# VIRTUAL MACHINE: Mini Active Directory Domain Controller
+# ==========================================================================================
+# Creates a lightweight Ubuntu VM configured as a Samba AD DC.
+#   - Machine sizing is controlled by var.machine_type (default: e2-small).
+#   - Bootstraps automatically using a startup script template.
+#   - Service account attached for optional GCP API interactions.
+# ==========================================================================================
 
 resource "google_compute_instance" "mini_ad_dc_instance" {
-
-  name = "mini-ad-dc-${lower(var.netbios)}"
-
-  # Machine type defines CPU, memory, and price class.
-  # `e2-micro` is small and cheap — perfect for testing.
-
+  name         = "mini-ad-dc-${lower(var.netbios)}"
   machine_type = var.machine_type
+  zone         = var.zone
 
-  # Zone specifies the physical location where this VM lives.
-  # Must match your network/subnet region.
-
-  zone = var.zone
-
-  # --------- BOOT DISK: OS and root filesystem ---------
-
+  # -----------------------------------------------------------------
+  # Boot disk
+  # Ubuntu 24.04 LTS is pulled dynamically from the GCP Ubuntu image family.
+  # -----------------------------------------------------------------
   boot_disk {
     initialize_params {
-      # Fetches the latest Ubuntu 24.04 LTS image dynamically.
       image = data.google_compute_image.ubuntu_latest.self_link
     }
   }
 
-  # --------- NETWORK INTERFACE: Connect to VPC ---------
-
+  # -----------------------------------------------------------------
+  # Network configuration
+  # Attaches the instance to the specified VPC and subnet.
+  # -----------------------------------------------------------------
   network_interface {
-    network    = var.network    # Attach to the `ad-vpc` network.
-    subnetwork = var.subnetwork # Specifically attach to `ad-subnet` (in `us-central1`).
+    network    = var.network
+    subnetwork = var.subnetwork
   }
 
-  # --------- METADATA: Custom data passed to the VM ---------
-  # Metadata can be read by the VM and used during startup.
-  # This is often used to pass config values or trigger startup scripts.
-
+  # -----------------------------------------------------------------
+  # Metadata injection
+  # Passes variables into a startup script that provisions Samba AD DC.
+  # Includes domain identity values and seeded user definitions.
+  # -----------------------------------------------------------------
   metadata = {
-    enable-oslogin = "TRUE" # Enable OS Login for secure SSH access.
-
-    # Inject a domain join script to configure the VM to join your AD domain at boot.
-    # `templatefile()` allows you to pass variables into the script, like domain name and OU path.
+    enable-oslogin = "TRUE" # Enforce GCP OS Login for SSH access.
 
     startup-script = templatefile("${path.module}/scripts/mini-ad.sh.template", {
       HOSTNAME_DC        = "ad1"
@@ -89,38 +90,53 @@ resource "google_compute_instance" "mini_ad_dc_instance" {
     })
   }
 
-  # --------- SERVICE ACCOUNT: What permissions does the VM have? ---------
-  # This attaches a service account to the VM to allow it to interact with GCP services.
-  # The service account should have appropriate permissions (like joining domains).
-
+  # -----------------------------------------------------------------
+  # Service account
+  # Grants VM permissions to interact with GCP APIs.
+  # Typically limited scope; here granted full cloud-platform for lab/demo simplicity.
+  # -----------------------------------------------------------------
   service_account {
-    email  = var.email                                          # Email address of the service account to use.
-    scopes = ["https://www.googleapis.com/auth/cloud-platform"] # Full access to GCP APIs.
+    email  = var.email
+    scopes = ["https://www.googleapis.com/auth/cloud-platform"]
   }
 
-  # --------- FIREWALL TAGS: Apply firewall rules ---------
-  # This applies the "ad-dc" firewall rule we created above.
-
+  # -----------------------------------------------------------------
+  # Firewall tags
+  # Ensures the AD DC firewall rule applies to this VM.
+  # -----------------------------------------------------------------
   tags = ["ad-dc"]
 }
 
-# -----------------------------------------------------
-# DATA SOURCE: Lookup latest Ubuntu image dynamically
-# -----------------------------------------------------
-# This data source fetches the latest Ubuntu 24.04 LTS image from GCP's public Ubuntu image family.
-# Using `data` instead of hard-coding the image ensures your VM always uses the newest version.
+# ==========================================================================================
+# DATA SOURCE: Ubuntu Image
+# ==========================================================================================
+# Always pulls the latest Ubuntu 24.04 LTS image from GCP’s official Ubuntu image project.
+# Using a family reference avoids stale image references over time.
+# ==========================================================================================
+
 data "google_compute_image" "ubuntu_latest" {
-  family  = "ubuntu-2404-lts-amd64" # Specifies the image family (Ubuntu 24.04 LTS).
-  project = "ubuntu-os-cloud"       # This is the official GCP project hosting Ubuntu images.
+  family  = "ubuntu-2404-lts-amd64"
+  project = "ubuntu-os-cloud"
 }
 
+# ==========================================================================================
+# PROVISIONING DELAY: Wait for Samba bootstrap
+# ==========================================================================================
+# Gives the startup script time to configure Samba AD DC before DNS forwarding zone creation.
+# Default delay is 240s (tune based on observed bootstrap time).
+# ==========================================================================================
 
-# Wait for AD DC provisioning (Samba/DNS startup)
-# Conservative 240s delay → adjust if bootstrap time differs.
 resource "time_sleep" "wait_for_mini_ad" {
   depends_on      = [google_compute_instance.mini_ad_dc_instance]
   create_duration = "240s"
 }
+
+# ==========================================================================================
+# MANAGED PRIVATE DNS ZONE: AD Forward Zone
+# ==========================================================================================
+# Creates a private Cloud DNS zone forwarding to the Samba AD DC.
+# Ensures GCP resources in the VPC can resolve AD-integrated DNS queries.
+# ==========================================================================================
 
 resource "google_dns_managed_zone" "ad_forward_zone" {
   name        = "${lower(var.netbios)}-forward-zone"
@@ -144,30 +160,25 @@ resource "google_dns_managed_zone" "ad_forward_zone" {
 }
 
 # ==========================================================================================
-# Local Variable: default_users_json
-# ------------------------------------------------------------------------------------------
-# - Renders a JSON file (`users.json.template`) into a single JSON blob
-# - Injects unique random passwords for test/demo users
-# - Template variables are replaced with real values at runtime
-# - Passed into the VM bootstrap so users are created automatically
+# LOCALS: User Definitions
+# ==========================================================================================
+# local.default_users_json
+#   - Renders the users.json.template with AD-specific values (DNs, realm, netbios).
+#   - Injects admin password for bootstrap user accounts.
+#
+# local.effective_users_json
+#   - Chooses between user-provided var.users_json or the generated default.
+#   - Ensures VM always has a valid JSON blob to seed AD users/groups.
 # ==========================================================================================
 
 locals {
   default_users_json = templatefile("${path.module}/scripts/users.json.template", {
-    USER_BASE_DN      = var.user_base_dn      # Base DN for placing new users in LDAP
-    DNS_ZONE          = var.dns_zone          # AD-integrated DNS zone
-    REALM             = var.realm             # Kerberos realm (FQDN in uppercase)
-    NETBIOS           = var.netbios           # NetBIOS domain name
-    sysadmin_password = var.ad_admin_password # Sysadmin password
+    USER_BASE_DN      = var.user_base_dn
+    DNS_ZONE          = var.dns_zone
+    REALM             = var.realm
+    NETBIOS           = var.netbios
+    sysadmin_password = var.ad_admin_password
   })
-}
 
-# -------------------------------------------------------------------
-# Local variable: effective_users_json
-# - Determines which users.json definition to use
-# - If the caller provides var.users_json → use that
-# - Otherwise, fall back to local.default_users_json
-# -------------------------------------------------------------------
-locals {
   effective_users_json = coalesce(var.users_json, local.default_users_json)
 }
