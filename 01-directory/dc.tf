@@ -140,3 +140,16 @@ locals {
     akumar_password = random_password.akumar_password.result # Random password for Amit Kumar
   })
 }
+
+resource "google_dns_managed_zone" "ad_private_zone" {
+  name        = "${lower(var.netbios)}-zone"            # Terraform name
+  dns_name    = "${lower(var.dns_zone)}."               # Your AD DNS domain (must end with a dot)
+  description = "Private DNS zone for ${var.netbios}."
+  visibility  = "private"
+
+  private_visibility_config {
+    networks {
+      network_url = google_compute_network.ad_vpc.id
+    }
+  }
+}
