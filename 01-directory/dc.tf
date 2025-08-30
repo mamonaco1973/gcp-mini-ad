@@ -97,6 +97,8 @@ resource "google_compute_instance" "mini_ad_dc_instance" {
   # This applies the "allow-ssh" firewall rule we created above.
 
   tags = ["allow-ssh"]
+
+  depends_on = [ google_compute_subnetwork.ad_subnet ]
 }
 
 # -----------------------------------------------------
