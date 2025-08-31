@@ -1,22 +1,35 @@
-# **Google Managed Microsoft AD**  
+# GCP Mini Active Directory  
 
-This is Part 3 of the Series: [Deploying Active Directory in the Cloud](https://youtu.be/H5lKJPJBL5s)  
+This project is a follow-up to our full **Google Cloud Managed Microsoft AD** project. While managed AD services are well-suited for production, they can be expensive for prototyping and require long provisioning times. The **“mini-AD”** approach provides a faster, lower-cost alternative that delivers a fully functional Active Directory environment that builds much quicker.  
 
-## **Introduction**  
+Using **Terraform, Samba 4, and automated configuration scripts**, this deployment provisions an **Ubuntu-based Compute Engine VM** that serves as both a **Domain Controller and DNS server**. It integrates into a custom **Google Cloud VPC** with private subnets, **firewall rules** for AD/DC traffic, and **Secret Manager** for secure credential storage.  
 
-In this video, we will demonstrate the deployment of **Google Managed Microsoft Active Directory (Managed AD)**, a fully managed **Active Directory** solution in Google Cloud, while covering the following tasks:  
+Once the infrastructure is deployed, additional **Windows and Linux VMs** are provisioned into the same VPC and automatically joined to the domain at boot. The join process is handled by custom scripts (`ad_join.ps1` for Windows and `ad_join.sh` for Linux) that configure authentication and domain integration.  
 
-- **Configure secure networking** by setting up subnets, firewall rules, and Cloud DNS to ensure seamless domain connectivity.  
-- **Deploy Google Managed Microsoft AD** to support domain-joined workloads.   
-- **Join both Windows and Linux servers** to the Active Directory domain.  
-- **Configure SSSD** ([System Security Services Daemon](https://sssd.io/)) for Linux authentication with Active Directory.  
-- **Integrate with Google Secret Manager** to securely store and retrieve administrator credentials.  
-- **Manage directory objects and policies**, including users, groups, and Organizational Units (OUs).  
-- **Clean up resources** by decommissioning all infrastructure provisioned during the process.  
+This solution is ideal for **labs, demos, and development environments** where Active Directory integration is needed without the cost and provisioning time of Google Managed Microsoft AD. It is **not intended for production use**, but provides a complete, repeatable environment for testing AD-connected workloads in GCP.  
 
-This tutorial will help you understand **Google Managed Microsoft AD** and how to use it for **identity management in Google Cloud environments**.  
+See the `Limitations` section for a list of caveats.  
 
-![GCP diagram](gcp-directory.png)
+![GCP diagram](gcp-mini-directory.png)  
+
+## Limitations  
+
+While the GCP mini-AD deployment provides a functional and cost-effective Active Directory environment for labs, demos, and development, it does not include many of the advanced features found in **Google Cloud Managed Microsoft AD** or a fully managed Windows Server AD deployment:  
+
+### Issues Related to PaaS vs IaaS (Operational & Platform-Level)  
+- **High Availability & Multi-Region** – Managed Microsoft AD provisions redundant domain controllers across zones automatically; mini-AD is a single VM without failover.  
+- **Automated Backups & Snapshots** – Managed AD handles scheduled backups; mini-AD requires manual snapshots or custom backup workflows.  
+- **Automatic Patching** – Managed AD auto-patches Windows Server and AD services; mini-AD requires manual updates of Ubuntu, Samba, and Kerberos.  
+- **Security Hardening & Compliance** – Managed AD is pre-hardened and validated for compliance frameworks; mini-AD security depends entirely on your configuration.  
+- **24/7 Google Support** – Managed AD includes full Google Cloud support; mini-AD requires you to manage and troubleshoot all aspects yourself.  
+- **Monitoring & Metrics** – Managed AD integrates with Cloud Monitoring and Logging; mini-AD requires you to manually configure monitoring and log forwarding.  
+
+### Functional Differences (AD Feature Gaps & Compatibility)  
+- **Google Cloud Service Integration** – Managed AD integrates natively with services such as Filestore, SQL Server on GCE, and GKE; mini-AD requires additional configuration to enable these integrations.  
+- **Group Policy Objects (GPOs)** – Managed AD supports full Windows GPOs; Samba’s GPO support is limited and lacks multi-DC replication.  
+- **PowerShell AD Cmdlets** – Managed AD exposes AD Web Services for remote management; Samba mini-AD does not support native AD PowerShell cmdlets.  
+- **Kerberos Trusts with On-Prem AD** – Managed AD supports domain and forest trusts; mini-AD requires manual Kerberos/LDAP configuration, which is complex and limited.  
+- **No Google Identity (Cloud Identity / Workspace) Integration** – Mini-AD cannot integrate with Google Identity or Cloud IAM. This prevents seamless SSO, conditional access, and native identity federation with Google Workspace or IAM-controlled resources.  
 
 ## Prerequisites
 
@@ -26,87 +39,61 @@ This tutorial will help you understand **Google Managed Microsoft AD** and how t
 
 If this is your first time watching our content, we recommend starting with this video: [GCP + Terraform: Easy Setup](https://youtu.be/3spJpYX4f7I). It provides a step-by-step guide to properly configure Terraform, Packer, and the gcloud CLI.
 
-## Download this Repository
+## Download this Repository  
+
+Clone the repository from GitHub and move into the project directory:  
 
 ```bash
-git clone https://github.com/mamonaco1973/gcp-directory.git
-cd gcp-directory
-```
+git clone https://github.com/mamonaco1973/gcp-mini-ad.git
+cd gcp-mini-ad
+```  
 
-## Build the Code
+---
 
-Run [check_env](check_env.sh) and [api_setup](api_setup.sh) then run [apply](apply.sh).
+## Build the Code  
+
+Run [check_env](check_env.sh) to validate your environment, then run [apply](apply.sh) to provision the infrastructure.  
 
 ```bash
-develop-vm:~/gcp-directory$ ./check_env.sh
-NOTE: Validating that required commands are found in the PATH.
+develop-vm:~/gcp-mini-ad$ ./apply.sh
+NOTE: Validating that required commands are in PATH.
 NOTE: gcloud is found in the current PATH.
 NOTE: terraform is found in the current PATH.
 NOTE: All required commands are available.
-NOTE: Validating credentials.json and test the gcloud command
-Activated service account credentials for: [terraform-build@debug-project-446221.iam.gserviceaccount.com]
-develop-vm:~/gcp-directory$ ./api_setup.sh
-NOTE: Validating credentials.json and test the gcloud command
-Activated service account credentials for: [terraform-build@debug-project-446221.iam.gserviceaccount.com]
-NOTE: Enabling APIs needed for build.
-Updated property [core/project].
-develop-vm:~/gcp-directory$ ./apply.sh
-NOTE: Validating that required commands are found in the PATH.
-NOTE: gcloud is found in the current PATH.
-NOTE: terraform is found in the current PATH.
-NOTE: All required commands are available.
-NOTE: Validating credentials.json and test the gcloud command
-Activated service account credentials for: [terraform-build@debug-project-446221.iam.gserviceaccount.com]
-Initializing the backend...
+NOTE: Checking Google Cloud CLI connection.
+NOTE: Successfully authenticated with GCP.
 Initializing provider plugins...
-- Finding latest version of hashicorp/random...
-- Finding latest version of hashicorp/google...
-- Installing hashicorp/random v3.7.1...
-- Installed hashicorp/random v3.7.1 (signed by HashiCorp)
-- Installing hashicorp/google v6.24.0...
-- Installed hashicorp/google v6.24.0 (signed by HashiCorp)
-Terraform has created a lock file .terraform.lock.hcl to record the provider
-selections it made above. Include this file in your version control repository
-so that Terraform can guarantee to make the same selections by default when
-you run "terraform init" in the future.
-
 Terraform has been successfully initialized!
-[...]
-```
+```  
+## Build Results  
 
-### Build Process Overview  
+When the deployment completes, the following resources are created:  
 
-The build process consists of two phases:  
+- **Networking:**  
+  - A custom VPC with private subnets for domain controller and client instances  
+  - Firewall rules that allow only the necessary AD/DC ports (LDAP, Kerberos, DNS, SMB, etc.)  
+  - Internal DNS resolution configured through the domain controller  
 
-1. **Phase 1:** Use Terraform to provision the required networking and deploy the Managed Active Directory instance. This phase takes approximately **20-40 minutes** to complete.  
-2. **Phase 2:** Once the directory service is provisioned, deploy a Linux and a Windows VM instance. Their respective **startup scripts** will automatically join them to the domain during initialization.  
+- **Security & Identity:**  
+  - Google Cloud Secret Manager entries for administrator and user credentials  
+  - Firewall policies scoped to the domain controller and client instances  
 
-## Tour of Build Output in the GCP Console
+- **Active Directory Server:**  
+  - An Ubuntu-based Compute Engine VM running Samba 4 as both Domain Controller and DNS server  
+  - Configured Kerberos realm and NetBIOS name  
+  - Administrator credentials stored securely in Secret Manager  
+  - User and group provisioning via Terraform templates (`users.json.template`)  
 
-- **The Managed Active Directory Instance**
-- **Secrets Manager**
-- **The Windows VM Instance**
-- **The Linux VM Instance**
+- **Client Instances:**  
+  - Windows VM automatically joined to the domain via [ad_join.ps1](02-servers/scripts/ad_join.ps1) at boot  
+  - Linux VM joined to the domain using [ad_join.sh](02-servers/scripts/ad_join.sh) with SSSD configuration  
+  - Both client instances authenticate against the mini-AD domain  
 
-![GCP Console](console1.png)
-
-![GCP Console](console2.png) 
-
-### Retrieving Initial Admin Credentials
-
-Once **Google Managed Microsoft AD** is provisioned, Google automatically creates the **`setupadmin`** account within the directory. This account has **Domain Admin** privileges, allowing you to perform administrative tasks like creating Organizational Units (OUs), managing Group Policy, and adding users.  
-
-The initial password for the `setupadmin` account can be retrieved directly via **gcloud CLI** (`gcloud active-directory domains reset-admin-password "mcloud.mikecloud.com"`) or the **Google Cloud Console**.  
-
-In this project, we automate this by storing the **`setupadmin`** credentials in **Google Secret Manager** using a secret named `admin_ad_credentials`.
-
-This allows Terraform and shell scripts to dynamically retrieve credentials for subsequent automation steps, such as joining servers to the domain.
-
-### Users and Groups
+## Users and Groups
 
 As part of this project, when the Windows instance boots and successfully joins Active Directory, a set of **users** and **groups** are automatically created through a scripted process. These resources are intended for **testing and demonstration purposes**, showcasing how to automate user and group provisioning in a cloud-integrated Active Directory environment.
 
-#### Groups Created
+### Groups Created
 
 | Group Name    | Group Category | Group Scope | gidNumber |
 |----------------|----------------|----------------|------------|
@@ -115,7 +102,7 @@ As part of this project, when the Windows instance boots and successfully joins 
 | us             | Security       | Universal     | 10003 |
 | linux-admins   | Security       | Universal     | 10004 |
 
-#### Users Created and Group Memberships
+### Users Created and Group Memberships
 
 | Username | Full Name   | uidNumber | gidNumber | Groups Joined                    |
 |---------|------------|-----------|-----------|----------------------|
@@ -127,9 +114,10 @@ As part of this project, when the Windows instance boots and successfully joins 
 ---
 
 
-#### Understanding `uidNumber` and `gidNumber` for Linux Integration
+### Understanding `uidNumber` and `gidNumber` for Linux Integration
 
 The **`uidNumber`** (User ID) and **`gidNumber`** (Group ID) attributes are critical when integrating **Active Directory** with **Linux systems**, particularly in environments where **SSSD** ([System Security Services Daemon](https://sssd.io/)) or similar services are used for identity management. These attributes allow Linux hosts to recognize and map Active Directory users and groups into the **POSIX** (Portable Operating System Interface) user and group model.
+
 
 ### Log into Windows Instance  
 
@@ -138,8 +126,6 @@ After the Windows instance boots, the [startup script](02-servers/scripts/ad_joi
 - Install Active Directory Administrative Tools  
 - AWS CLI Installation  
 - Join EC2 Instance to Active Directory  
-- Create Active Directory Groups  
-- Create Active Directory Users and Assign to Groups  
 - Grant RDP Access  
 - Final System Reboot  
 
@@ -162,30 +148,16 @@ Linux user credentials are stored as secrets.
 
 ![Linux VM Instance](linux.png) 
 
-## Run the "destroy" script when you are done
+## Clean Up  
+
+When finished, remove all resources with:  
 
 ```bash
-develop-vm:~/gcp-directory$ ./destroy.sh
-Initializing the backend...
-Initializing provider plugins...
-- Reusing previous version of hashicorp/google from the dependency lock file
-- Reusing previous version of hashicorp/random from the dependency lock file
-- Using previously-installed hashicorp/google v6.24.0
-- Using previously-installed hashicorp/random v3.7.1
+./destroy.sh
+```  
 
-Terraform has been successfully initialized!
+This uses Terraform to delete the VPC, Compute Engine instances, firewall rules, Secret Manager entries, and any other resources created by this project.  
 
-You may now begin working with Terraform. Try running "terraform plan" to see
-any changes that are required for your infrastructure. All Terraform commands
-should now work.
+---
 
-If you ever set or change modules or backend configuration for Terraform,
-rerun this command to reinitialize your working directory. If you forget, other
-commands will detect it and remind you to do so if necessary.
-random_string.vm_suffix: Refreshing state... [id=qewil5]
-data.google_compute_network.ad_vpc: Reading...
-data.google_compute_image.ubuntu_latest: Reading...
-data.google_compute_image.windows_2022: Reading...
-[...]
-```
-
+⚠️ **Reminder:** This project is for **labs and development only**. Do not use it in production.  
