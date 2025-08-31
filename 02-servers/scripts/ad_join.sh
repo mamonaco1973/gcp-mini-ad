@@ -44,7 +44,7 @@ admin_username=$(echo $secretValue | jq -r '.username' | sed 's/.*\\//')
 # - ${computers_ou}: The organizational unit (OU) for the computer account.
 # - Log the output and errors to /tmp/join.log for debugging.
 echo -e "$admin_password" | sudo /usr/sbin/realm join -U "$admin_username" \
-    ${domain_fqdn} --computer-ou="${computers_ou}" --verbose \
+    ${domain_fqdn} --verbose \
     >> /tmp/join.log 2>> /tmp/join.log
 
 # ---------------------------------------------------------------------------------

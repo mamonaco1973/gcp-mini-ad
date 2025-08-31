@@ -93,7 +93,6 @@ resource "google_compute_instance" "linux_ad_instance" {
   
     startup-script = templatefile("./scripts/ad_join.sh", {
       domain_fqdn   = "mcloud.mikecloud.com"
-      computers_ou  = "OU=Computers,OU=Cloud,DC=mcloud,DC=mikecloud,DC=com"
     })
   }
 

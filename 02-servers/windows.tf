@@ -1,3 +1,29 @@
+# --- User: SysAdmin ---
+
+# Generate a random password for SysAdmin
+resource "random_password" "sysadmin_password" {
+  length           = 24
+  special          = true
+  override_special = "-_."
+}
+
+# Create secret for SysAdmin's credentials in GCP Secret Manager
+resource "google_secret_manager_secret" "sysadmin_secret" {
+  secret_id = "sysadmin-ad-credentials"
+
+  replication {
+    auto {}
+  }
+}
+
+resource "google_secret_manager_secret_version" "admin_secret_version" {
+  secret = google_secret_manager_secret.sysadmin_secret.id
+  secret_data = jsonencode({
+    username = "sysadmin"
+    password = random_password.sysadmin_password.result
+  })
+}
+
 # -------------------------------------------------
 # FIREWALL RULE: Allow RDP (Remote Desktop Protocol)
 # -------------------------------------------------
@@ -88,8 +114,11 @@ resource "google_compute_instance" "windows_ad_instance" {
     windows-startup-script-ps1 = templatefile("./scripts/ad_join.ps1", {
       # Pass domain name and OU path as variables into the PowerShell script.
       domain_fqdn  = "mcloud.mikecloud.com"
-      computers_ou = "OU=Computers,OU=Cloud,DC=mcloud,DC=mikecloud,DC=com"
     })
+
+    admin_username = "sysadmin"
+    admin_password = random_password.sysadmin_password.result
+  
   }
 
   # --------- FIREWALL TAGS: Apply Firewall Rules ---------

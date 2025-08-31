@@ -29,10 +29,10 @@ cd ..
 cd 02-servers
 
 # Initialize Terraform (download providers, set up backend, etc.) for server deployment.
-#terraform init
+terraform init
 
 # Apply the Terraform configuration, automatically approving all changes (no manual confirmation required).
-#terraform apply -auto-approve
+terraform apply -auto-approve
 
 # Return to the parent directory once server provisioning is complete.
 cd ..
