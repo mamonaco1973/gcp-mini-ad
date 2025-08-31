@@ -294,6 +294,6 @@ done
 # Reboot to ensure all changes are applied cleanly
 #--------------------------------------------------------------------
 
-uptime /root/userdata.log 2>&1
+uptime >> /root/userdata.log 2>&1
 touch "$FLAG_FILE"
 reboot
