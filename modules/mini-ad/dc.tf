@@ -123,12 +123,12 @@ data "google_compute_image" "ubuntu_latest" {
 # PROVISIONING DELAY: Wait for Samba bootstrap
 # ==========================================================================================
 # Gives the startup script time to configure Samba AD DC before DNS forwarding zone creation.
-# Default delay is 240s (tune based on observed bootstrap time).
+# Default delay is 300s (tune based on observed bootstrap time).
 # ==========================================================================================
 
 resource "time_sleep" "wait_for_mini_ad" {
   depends_on      = [google_compute_instance.mini_ad_dc_instance]
-  create_duration = "240s"
+  create_duration = "300s"
 }
 
 # ==========================================================================================
