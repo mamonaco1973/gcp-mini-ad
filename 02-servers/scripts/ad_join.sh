@@ -41,7 +41,6 @@ admin_username=$(echo $secretValue | jq -r '.username' | sed 's/.*\\//')
 
 # Join the Active Directory domain using the `realm` command.
 # - ${domain_fqdn}: The fully qualified domain name (FQDN) of the AD domain.
-# - ${computers_ou}: The organizational unit (OU) for the computer account.
 # - Log the output and errors to /tmp/join.log for debugging.
 echo -e "$admin_password" | sudo /usr/sbin/realm join -U "$admin_username" \
     ${domain_fqdn} --verbose \
