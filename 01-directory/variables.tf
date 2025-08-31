@@ -62,7 +62,7 @@ variable "zone" {
 variable "machine_type" {
   description = "Machine type for mini AD instance (minimum is e2-small)"
   type        = string
-  default     = "e2-small"
+  default     = "e2-standard-1"
 }
 
 # --------------------------------------------------------------------------------

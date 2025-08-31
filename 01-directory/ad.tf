@@ -18,6 +18,7 @@ module "mini_ad" {
   dns_zone          = var.dns_zone                           # DNS zone (e.g., mcloud.mikecloud.com)
   subnetwork        = google_compute_subnetwork.ad_subnet.id # Subnet for AD VM placement
   email             = local.service_account_email            # Service account email
+  machine_type      = var.machine_type                       # Machine type for AD VM
 
   # Ensure NAT + route association exist before bootstrapping (for package repos, etc.)
   depends_on = [google_compute_subnetwork.ad_subnet,

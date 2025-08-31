@@ -77,12 +77,12 @@ variable "zone" {
 # Example: "e2-small"
 # Defines CPU and memory allocated to the VM.
 # e2-small (2 vCPU, 2 GB RAM) is a reasonable minimum for a lightweight DC,
-# but you can scale up (e2-medium, n2-standard-2, etc.) for production.
+# but you can scale up (e2-medium, n2-standard-2, etc.) for higher performance
 # --------------------------------------------------------------------------------
 variable "machine_type" {
   description = "Machine type for mini AD instance (minimum is e2-small)"
   type        = string
-  default     = "e2-small"
+  default     = "e2-standard-1"
 }
 
 # --------------------------------------------------------------------------------

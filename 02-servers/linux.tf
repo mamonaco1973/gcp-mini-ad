@@ -53,9 +53,8 @@ resource "google_compute_instance" "linux_ad_instance" {
   name         = "linux-ad-${random_string.vm_suffix.result}"
 
   # Machine type defines CPU, memory, and price class.
-  # `e2-micro` is small and cheap — perfect for testing.
   
-  machine_type = "e2-micro"
+  machine_type = "e2-standard-1"
 
   # Zone specifies the physical location where this VM lives.
   # Must match your network/subnet region.
