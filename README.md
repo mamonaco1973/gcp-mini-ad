@@ -123,8 +123,7 @@ The **`uidNumber`** (User ID) and **`gidNumber`** (Group ID) attributes are crit
 
 After the Windows instance boots, the [startup script](02-servers/scripts/ad_join.ps1) executes which does the following tasks   
 
-- Install Active Directory Administrative Tools  
-- AWS CLI Installation  
+- Install Active Directory Administrative Tools   
 - Join EC2 Instance to Active Directory  
 - Grant RDP Access  
 - Final System Reboot  
@@ -138,7 +137,6 @@ Administrator credentials are stored in the `admin_ad_credentials` secret.
 When the Linux instance boots, the [startup script](02-servers/scripts/ad_join.sh) runs the following tasks:  
 
 - Update OS and install required packages  
-- Install AWS CLI  
 - Join the Active Directory domain with SSSD  
 - Enable password authentication for AD users  
 - Configure SSSD for AD integration  
