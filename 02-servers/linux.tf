@@ -54,7 +54,7 @@ resource "google_compute_instance" "linux_ad_instance" {
 
   # Machine type defines CPU, memory, and price class.
   
-  machine_type = "e2-standard-1"
+  machine_type = "e2-medium"
 
   # Zone specifies the physical location where this VM lives.
   # Must match your network/subnet region.
