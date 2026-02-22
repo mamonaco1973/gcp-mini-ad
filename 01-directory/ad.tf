@@ -21,8 +21,8 @@ module "mini_ad" {
   # Module Source
   # ----------------------------------------------------------------------------------------
   # Relative path to the local mini-ad module implementation.
-  source = "../modules/mini-ad"
-
+  source = "github.com/mamonaco1973/module-gcp-mini-ad"
+  
   # ----------------------------------------------------------------------------------------
   # Domain / Identity Inputs
   # ----------------------------------------------------------------------------------------
