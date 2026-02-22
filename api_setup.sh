@@ -30,7 +30,7 @@ fi
 # Activates the service account defined in credentials.json so subsequent
 # gcloud commands run under this identity.
 
-gcloud auth activate-service-account --key-file="./credentials.json" > /dev/null
+gcloud auth activate-service-account --key-file="./credentials.json" > /dev/null 2> /dev/null
 
 # ------------------------------------------------------------------------------
 # Extract project_id from credentials.json
