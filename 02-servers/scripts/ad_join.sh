@@ -1,100 +1,68 @@
 #!/bin/bash
+set -euo pipefail
 
-# This script automates the process of updating the OS, installing required packages,
-# joining an Active Directory (AD) domain, configuring system settings, and cleaning
-# up permissions.
+LOG=/root/boot.log
+mkdir -p /root
+touch "$LOG"
+chmod 600 "$LOG"
+exec > >(tee -a "$LOG" | logger -t startup-script -s 2>/dev/console) 2>&1
+trap 'echo "ERROR at line $LINENO"; exit 1' ERR
 
-# ---------------------------------------------------------------------------------
-# Section 1: Update the OS and Install Required Packages
-# ---------------------------------------------------------------------------------
+echo "startup-script start: $(date -Is)"
 
-# Update the package list to ensure the latest versions of packages are available.
-apt-get update -y
+RUN_ONCE_MARKER="/var/lib/startup-script.ad-join.done"
+if [[ -f "$RUN_ONCE_MARKER" ]]; then
+  echo "NOTE: Run-once marker exists ($RUN_ONCE_MARKER). Exiting."
+  exit 0
+fi
 
-# Set the environment variable to prevent interactive prompts during installation.
 export DEBIAN_FRONTEND=noninteractive
 
-# Install necessary packages for AD integration, system management, and utilities.
-# - realmd, sssd-ad, sssd-tools: Tools for AD integration and authentication.
-# - libnss-sss, libpam-sss: Libraries for integrating SSSD with the system.
-# - adcli, samba-common-bin, samba-libs: Tools for AD and Samba integration.
-# - oddjob, oddjob-mkhomedir: Automatically create home directories for AD users.
-# - packagekit: Package management toolkit.
-# - krb5-user: Kerberos authentication tools.
-# - nano, vim: Text editors for configuration file editing.
-apt-get install less unzip realmd sssd-ad sssd-tools libnss-sss \
-    libpam-sss adcli samba-common-bin samba-libs oddjob \
-    oddjob-mkhomedir packagekit krb5-user nano vim -y
+apt-get update -y
+apt-get install -y \
+  less unzip jq \
+  realmd sssd-ad sssd-tools libnss-sss libpam-sss \
+  adcli samba-common-bin samba-libs oddjob oddjob-mkhomedir \
+  packagekit krb5-user nano vim
 
-# ---------------------------------------------------------------------------------
-# Section 2 Join the Active Directory Domain
-# ---------------------------------------------------------------------------------
+secret_json="$(gcloud secrets versions access latest --secret="admin-ad-credentials-mini")"
+admin_password="$(echo "$secret_json" | jq -r '.password')"
+admin_username="$(echo "$secret_json" | jq -r '.username' | sed 's/.*\\//')"
 
-# Retrieve the secret value (AD admin credentials) from AWS Secrets Manager.
-secretValue=$(gcloud secrets versions access latest --secret="admin-ad-credentials-mini")
+echo "NOTE: Joining domain: ${domain_fqdn}"
+echo -e "$admin_password" | /usr/sbin/realm join -U "$admin_username" \
+  "${domain_fqdn}" --verbose \
+  >> /tmp/join.log 2>> /tmp/join.log
 
-# Extract the admin password from the secret value using `jq`.
-admin_password=$(echo $secretValue | jq -r '.password')
+SSHD_CFG="/etc/ssh/sshd_config.d/60-cloudimg-settings.conf"
+if [[ -f "$SSHD_CFG" ]]; then
+  sed -i 's/^[[:space:]]*PasswordAuthentication[[:space:]]\+no/PasswordAuthentication yes/g' "$SSHD_CFG"
+  sed -i 's/^[[:space:]]*#\{0,1\}PasswordAuthentication[[:space:]]\+no/PasswordAuthentication yes/g' "$SSHD_CFG"
+else
+  echo "NOTE: SSHD config drop-in not found: $SSHD_CFG (skipping)"
+fi
 
-# Extract the admin username from the secret value and remove the domain prefix.
-admin_username=$(echo $secretValue | jq -r '.username' | sed 's/.*\\//')
-
-# Join the Active Directory domain using the `realm` command.
-# - ${domain_fqdn}: The fully qualified domain name (FQDN) of the AD domain.
-# - Log the output and errors to /tmp/join.log for debugging.
-echo -e "$admin_password" | sudo /usr/sbin/realm join -U "$admin_username" \
-    ${domain_fqdn} --verbose \
-    >> /tmp/join.log 2>> /tmp/join.log
-
-# ---------------------------------------------------------------------------------
-# Section 3: Allow Password Authentication for AD Users
-# ---------------------------------------------------------------------------------
-
-# Modify the SSH configuration to allow password authentication for AD users.
-# - Replace `PasswordAuthentication no` with `PasswordAuthentication yes`.
-sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/g' \
-    /etc/ssh/sshd_config.d/60-cloudimg-settings.conf
-
-# ---------------------------------------------------------------------------------
-# Section 4: Configure SSSD for AD Integration
-# ---------------------------------------------------------------------------------
-
-# Modify the SSSD configuration file to simplify user login and home directory creation.
-# - Disable fully qualified names (use only usernames instead of user@domain).
-sudo sed -i 's/use_fully_qualified_names = True/use_fully_qualified_names = False/g' \
-    /etc/sssd/sssd.conf
-
-# Disable LDAP ID mapping to use UIDs and GIDs from AD.
-sudo sed -i 's/ldap_id_mapping = True/ldap_id_mapping = False/g' \
-    /etc/sssd/sssd.conf
-
-# Allow all users to be able to SSH
-
-sudo sed -i 's/access_provider = ad/access_provider = simple/g' \
-    /etc/sssd/sssd.conf
-
-# Change the fallback home directory path to a simpler format (/home/%u).
-sudo sed -i 's|fallback_homedir = /home/%u@%d|fallback_homedir = /home/%u|' \
-    /etc/sssd/sssd.conf
-
-# Stop XAuthority warning 
+SSSD_CFG="/etc/sssd/sssd.conf"
+if [[ -f "$SSSD_CFG" ]]; then
+  sed -i 's/use_fully_qualified_names[[:space:]]*=[[:space:]]*True/use_fully_qualified_names = False/g' "$SSSD_CFG"
+  sed -i 's/ldap_id_mapping[[:space:]]*=[[:space:]]*True/ldap_id_mapping = False/g' "$SSSD_CFG"
+  sed -i 's/access_provider[[:space:]]*=[[:space:]]*ad/access_provider = simple/g' "$SSSD_CFG"
+  sed -i 's|fallback_homedir[[:space:]]*=[[:space:]]*/home/%u@%d|fallback_homedir = /home/%u|g' "$SSSD_CFG"
+else
+  echo "ERROR: Missing SSSD config: $SSSD_CFG"
+  exit 1
+fi
 
 touch /etc/skel/.Xauthority
 chmod 600 /etc/skel/.Xauthority
 
-# Restart the SSSD and SSH services to apply the changes.
+pam-auth-update --enable mkhomedir || true
+systemctl restart sssd
+systemctl restart ssh || systemctl restart sshd || true
 
-sudo pam-auth-update --enable mkhomedir
-sudo systemctl restart sssd
-sudo systemctl restart ssh
+echo "%linux-admins ALL=(ALL) NOPASSWD:ALL" | tee /etc/sudoers.d/10-linux-admins >/dev/null
+chmod 440 /etc/sudoers.d/10-linux-admins
 
-# ---------------------------------------------------------------------------------
-# Section 5: Grant Sudo Privileges to AD Linux Admins
-# ---------------------------------------------------------------------------------
-
-# Add a sudoers rule to grant passwordless sudo access to members of the
-# "linux-admins" AD group.
-sudo echo "%linux-admins ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/10-linux-admins
-
-
-
+mkdir -p "$(dirname "$RUN_ONCE_MARKER")"
+touch "$RUN_ONCE_MARKER"
+echo "startup-script complete: $(date -Is)"
