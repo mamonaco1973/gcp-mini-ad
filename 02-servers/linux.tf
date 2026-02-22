@@ -35,7 +35,7 @@ resource "random_string" "vm_suffix" {
 resource "google_compute_firewall" "allow_ssh" {
 
   name    = "allow-ssh" # Rule name (unique within the VPC).
-  network = "ad-vpc"    # VPC network this rule applies to.
+  network = "mini-ad-vpc"    # VPC network this rule applies to.
 
   # ----------------------------------------------------------------------------
   # Allow inbound SSH
