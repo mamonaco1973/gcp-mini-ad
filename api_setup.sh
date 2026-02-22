@@ -14,8 +14,6 @@
 #   - credentials.json present in current directory
 # ==============================================================================
 
-echo "NOTE: Validating credentials.json and test the gcloud command"
-
 # ------------------------------------------------------------------------------
 # Validate credentials file exists
 # ------------------------------------------------------------------------------
@@ -32,7 +30,7 @@ fi
 # Activates the service account defined in credentials.json so subsequent
 # gcloud commands run under this identity.
 
-gcloud auth activate-service-account --key-file="./credentials.json"
+gcloud auth activate-service-account --key-file="./credentials.json" > /dev/null
 
 # ------------------------------------------------------------------------------
 # Extract project_id from credentials.json
