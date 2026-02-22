@@ -31,8 +31,7 @@ admin_username="$(echo "$secret_json" | jq -r '.username' | sed 's/.*\\//')"
 
 echo "NOTE: Joining domain: ${domain_fqdn}"
 echo -e "$admin_password" | /usr/sbin/realm join -U "$admin_username" \
-  "${domain_fqdn}" --verbose \
-  >> /tmp/join.log 2>> /tmp/join.log
+  "${domain_fqdn}" --verbose 
 
 SSHD_CFG="/etc/ssh/sshd_config.d/60-cloudimg-settings.conf"
 if [[ -f "$SSHD_CFG" ]]; then
