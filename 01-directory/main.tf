@@ -1,15 +1,58 @@
+# ==============================================================================
 # Google Cloud Provider Configuration
-# Configures the Google Cloud provider using project details and credentials from a JSON file.
+# ------------------------------------------------------------------------------
+# Purpose:
+#   - Configures the Google Cloud provider for this Terraform workspace.
+#   - Loads authentication credentials from a local service account JSON file.
+#   - Dynamically extracts the project_id from the credentials to avoid hard-
+#     coding environment-specific values.
+#
+# Notes:
+#   - The credentials file must exist at ../credentials.json relative to this
+#     Terraform root.
+#   - Protect this file appropriately; it contains private key material.
+#   - Consider using environment variables (GOOGLE_APPLICATION_CREDENTIALS)
+#     for production workflows instead of committing file paths.
+# ==============================================================================
+
 provider "google" {
-  project     = local.credentials.project_id # Specifies the project ID extracted from the decoded credentials file.
-  credentials = file("../credentials.json")  # Path to the credentials JSON file for Google Cloud authentication.
+  # ---------------------------------------------------------------------------
+  # Project Configuration
+  # ---------------------------------------------------------------------------
+  # Uses the project_id parsed from the decoded credentials JSON.
+  project = local.credentials.project_id
+
+  # ---------------------------------------------------------------------------
+  # Authentication
+  # ---------------------------------------------------------------------------
+  # Loads raw service account credentials from disk for API authentication.
+  credentials = file("../credentials.json")
 }
 
-# Local Variables
-# Reads and decodes the credentials JSON file to extract useful details like project ID and service account email.
+# ==============================================================================
+# Local Variables: Credential Decoding
+# ------------------------------------------------------------------------------
+# Purpose:
+#   - Reads the service account JSON file once.
+#   - Decodes it into a structured map for easy attribute access.
+#   - Exposes commonly used fields (project_id, client_email) for reuse.
+#
+# Notes:
+#   - jsondecode(file(...)) converts the JSON document into a Terraform map.
+#   - Avoid duplicating file() calls across the configuration for consistency.
+# ==============================================================================
+
 locals {
-  credentials           = jsondecode(file("../credentials.json")) # Decodes the JSON file into a map for easier access.
-  service_account_email = local.credentials.client_email          # Extracts the service account email from the decoded JSON map.
+  # ---------------------------------------------------------------------------
+  # Decode Credentials File
+  # ---------------------------------------------------------------------------
+  # Converts credentials.json into a map structure for attribute access.
+  credentials = jsondecode(file("../credentials.json"))
+
+  # ---------------------------------------------------------------------------
+  # Extract Service Account Email
+  # ---------------------------------------------------------------------------
+  # Captures the service account email (client_email) for IAM bindings,
+  # instance service account configuration, or module inputs.
+  service_account_email = local.credentials.client_email
 }
-
-

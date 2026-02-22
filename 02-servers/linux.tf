@@ -1,121 +1,136 @@
-# -------------------------------------------------------------------
-# RANDOM STRING GENERATOR: Create a unique suffix for resource names
-# -------------------------------------------------------------------
-# This `random_string` resource generates a 6-character lowercase string.
-# It will be appended to the VM name to ensure uniqueness across deployments.
+# ==============================================================================
+# linux.tf
+# ------------------------------------------------------------------------------
+# Purpose:
+#   - Provision a Linux admin VM for Managed AD / domain join operations
+#   - Allow SSH access via a targeted VPC firewall rule (tag-based)
+#   - Use the latest Ubuntu 24.04 LTS image via a data source lookup
+#
+# Notes:
+#   - Firewall rule is intentionally open (0.0.0.0/0) for quick testing
+#   - Tighten source_ranges for production use
+#   - VM name includes a random suffix to avoid collisions
+# ==============================================================================
+
+# ==============================================================================
+# RANDOM STRING: Unique suffix for resource names
+# ------------------------------------------------------------------------------
+# Generates a 6-character lowercase string. Appended to the VM name to ensure
+# uniqueness across deployments.
+# ==============================================================================
 
 resource "random_string" "vm_suffix" {
   length  = 6     # Number of characters in the generated string.
-  special = false # Exclude special characters to keep names simple and DNS-friendly.
-  upper   = false # Use only lowercase characters for compatibility and aesthetics.
+  special = false # Exclude special chars (DNS-friendly resource names).
+  upper   = false # Lowercase only for consistency and compatibility.
 }
 
-# -------------------------------------------------
-# FIREWALL RULE: Allow SSH from anywhere (0.0.0.0/0)
-# -------------------------------------------------
-# This firewall rule opens port 22 (SSH) to the entire internet.
-# This is useful for initial setup, but should be restricted in production.
+# ==============================================================================
+# FIREWALL: Allow SSH (TCP/22) to tagged instances
+# ------------------------------------------------------------------------------
+# Opens TCP/22 from anywhere and targets instances with the "allow-ssh" tag.
+# Restrict source_ranges in production.
+# ==============================================================================
 
 resource "google_compute_firewall" "allow_ssh" {
 
-  name    = "allow-ssh"    # Friendly name for the rule (must be unique within the VPC).
-  network = "ad-vpc"       # Applies this rule to the `ad-vpc` network (must exist beforehand).
+  name    = "allow-ssh" # Rule name (unique within the VPC).
+  network = "ad-vpc"    # VPC network this rule applies to.
 
-  # --------- ALLOW BLOCK: Defines what traffic is allowed ---------
-
+  # ----------------------------------------------------------------------------
+  # Allow inbound SSH
+  # ----------------------------------------------------------------------------
   allow {
-    protocol = "tcp"       # This rule applies to TCP traffic.
-    ports    = ["22"]      # Specifically, it allows port 22 (the default port for SSH).
+    protocol = "tcp"  # Apply to TCP traffic.
+    ports    = ["22"] # SSH port.
   }
 
-  # --------- TARGET TAGS: What instances get this rule ---------
-  # This rule will only apply to instances tagged with "allow-ssh."
-  # In GCP, firewall rules don't apply to the whole network by default — you have to target specific resources.
-
+  # ----------------------------------------------------------------------------
+  # Target only instances with this network tag
+  # ----------------------------------------------------------------------------
   target_tags = ["allow-ssh"]
 
-  # --------- SOURCE RANGE: Who can connect ---------
-  # This allows SSH traffic from **anywhere** — very open!
-  # Consider locking this down to trusted IPs if you're not testing.
-
+  # ----------------------------------------------------------------------------
+  # Source CIDR ranges allowed to connect
+  # ----------------------------------------------------------------------------
   source_ranges = ["0.0.0.0/0"]
 }
 
-# ----------------------------------------------------
-# VIRTUAL MACHINE: Ubuntu 24.04 instance for AD setup
-# ----------------------------------------------------
-# This resource defines a single Compute Engine VM running Ubuntu.
-# It will be used to join the Managed AD domain and handle admin tasks.
+# ==============================================================================
+# COMPUTE INSTANCE: Ubuntu 24.04 VM for AD setup / admin tasks
+# ------------------------------------------------------------------------------
+# Single VM with:
+#   - Latest Ubuntu 24.04 LTS boot image (data source)
+#   - NIC in ad-vpc / ad-subnet with ephemeral public IP (SSH access)
+#   - Startup script to join the AD domain
+#   - Service account with cloud-platform scope
+# ==============================================================================
 
 resource "google_compute_instance" "linux_ad_instance" {
   # VM name includes a random suffix for uniqueness.
-  
   name         = "linux-ad-${random_string.vm_suffix.result}"
 
-  # Machine type defines CPU, memory, and price class.
-  
+  # Machine type controls vCPU and memory sizing.
   machine_type = "e2-medium"
 
-  # Zone specifies the physical location where this VM lives.
-  # Must match your network/subnet region.
-  
+  # Zone where the VM is deployed (must align with subnet region).
   zone         = "us-central1-a"
 
-  # --------- BOOT DISK: OS and root filesystem ---------
-  
+  # ----------------------------------------------------------------------------
+  # Boot disk: Ubuntu 24.04 LTS
+  # ----------------------------------------------------------------------------
   boot_disk {
     initialize_params {
-      # Fetches the latest Ubuntu 24.04 LTS image dynamically.
+      # Latest Ubuntu 24.04 LTS image from the selected image family.
       image = data.google_compute_image.ubuntu_latest.self_link
     }
   }
 
-  # --------- NETWORK INTERFACE: Connect to VPC ---------
-  
+  # ----------------------------------------------------------------------------
+  # Network interface: VPC + subnet + ephemeral public IP
+  # ----------------------------------------------------------------------------
   network_interface {
-    network    = "ad-vpc"   # Attach to the `ad-vpc` network.
-    subnetwork = "ad-subnet" # Specifically attach to `ad-subnet` (in `us-central1`).
+    network    = "ad-vpc"
+    subnetwork = "ad-subnet"
 
-    # Attach an ephemeral public IP so you can SSH into the VM directly.
-    access_config {}  # Without this, the VM will only have internal (private) IP.
+    # Enables an ephemeral public IP for direct SSH access.
+    access_config {}
   }
 
-  # --------- METADATA: Custom data passed to the VM ---------
-  # Metadata can be read by the VM and used during startup.
-  # This is often used to pass config values or trigger startup scripts.
-  
+  # ----------------------------------------------------------------------------
+  # Instance metadata: OS Login + startup script (domain join)
+  # ----------------------------------------------------------------------------
   metadata = {
-    enable-oslogin = "TRUE"  # Enable OS Login for secure SSH access.
+    enable-oslogin = "TRUE"
 
-    # Inject a domain join script to configure the VM to join your AD domain at boot.
-    # `templatefile()` allows you to pass variables into the script, like domain name and OU path.
-  
+    # Domain join script rendered from a template file.
     startup-script = templatefile("./scripts/ad_join.sh", {
       domain_fqdn   = "mcloud.mikecloud.com"
     })
   }
 
-  # --------- SERVICE ACCOUNT: What permissions does the VM have? ---------
-  # This attaches a service account to the VM to allow it to interact with GCP services.
-  # The service account should have appropriate permissions (like joining domains).
-  
+  # ----------------------------------------------------------------------------
+  # Service account: VM identity + API access scope
+  # ----------------------------------------------------------------------------
   service_account {
-    email  = local.service_account_email  # Email address of the service account to use.
-    scopes = ["https://www.googleapis.com/auth/cloud-platform"] # Full access to GCP APIs.
+    email  = local.service_account_email
+    scopes = ["https://www.googleapis.com/auth/cloud-platform"]
   }
 
-  # --------- FIREWALL TAGS: Apply firewall rules ---------
-  # This applies the "allow-ssh" firewall rule we created above.
-
+  # ----------------------------------------------------------------------------
+  # Network tags: bind firewall rule(s) to this instance
+  # ----------------------------------------------------------------------------
   tags = ["allow-ssh"]
 }
 
-# -----------------------------------------------------
-# DATA SOURCE: Lookup latest Ubuntu image dynamically
-# -----------------------------------------------------
-# This data source fetches the latest Ubuntu 24.04 LTS image from GCP's public Ubuntu image family.
-# Using `data` instead of hard-coding the image ensures your VM always uses the newest version.
+# ==============================================================================
+# DATA SOURCE: Latest Ubuntu 24.04 LTS image (GCE public image family)
+# ------------------------------------------------------------------------------
+# Pulls the newest image from the Ubuntu 24.04 LTS family so builds stay current
+# without hard-coding a specific image version.
+# ==============================================================================
+
 data "google_compute_image" "ubuntu_latest" {
-  family  = "ubuntu-2404-lts-amd64" # Specifies the image family (Ubuntu 24.04 LTS).
-  project = "ubuntu-os-cloud"       # This is the official GCP project hosting Ubuntu images.
+  family  = "ubuntu-2404-lts-amd64"
+  project = "ubuntu-os-cloud"
 }

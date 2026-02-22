@@ -1,69 +1,147 @@
-# This resource defines a **Custom Mode VPC** in Google Cloud.
-# "Custom Mode" means you are responsible for explicitly defining all subnets — GCP will NOT auto-create default subnets for you.
-# This is preferred for tightly controlled network architectures, like when setting up Active Directory or other enterprise systems.
+# ==============================================================================
+# Google Cloud Networking: Active Directory VPC Stack
+# ------------------------------------------------------------------------------
+# Purpose:
+#   - Provisions a custom-mode VPC dedicated to the mini Active Directory
+#     deployment.
+#   - Defines an explicitly managed subnet with a controlled CIDR range.
+#   - Configures Cloud Router + Cloud NAT to allow private instances outbound
+#     internet access without assigning public IP addresses.
+#
+# Design Principles:
+#   - Custom-mode networking for deterministic IP planning.
+#   - No default subnets (avoids accidental regional sprawl).
+#   - Private-only AD instances with secure outbound access via NAT.
+# ==============================================================================
+
+# ==============================================================================
+# VPC Network (Custom Mode)
+# ------------------------------------------------------------------------------
+# Creates a custom-mode Virtual Private Cloud.
+# - Custom mode requires you to define all subnets manually.
+# - Preferred for enterprise workloads (e.g., AD, databases, controlled CIDR).
+# - Prevents GCP from auto-creating one subnet per region.
+# ==============================================================================
 
 resource "google_compute_network" "ad_vpc" {
 
-  # The name of the VPC network being created.
-  # This must be unique within the project and will be referenced by subnets, firewall rules, etc.
+  # ---------------------------------------------------------------------------
+  # VPC Name
+  # ---------------------------------------------------------------------------
+  # Must be unique within the project.
+  # Referenced by subnets, routers, firewall rules, and VM NICs.
+  name = "mini-ad-vpc"
 
-  name = "ad-vpc"
-
-  # Disables automatic subnet creation.
-  # In "auto mode" GCP would create one subnet per region, with pre-defined CIDR ranges.
-  # We don't want that here — we want to explicitly define our own subnets (custom mode).
-
+  # ---------------------------------------------------------------------------
+  # Disable Auto Subnets
+  # ---------------------------------------------------------------------------
+  # Ensures this is a custom-mode VPC.
+  # No automatic regional subnet creation.
   auto_create_subnetworks = false
 }
 
-# This resource defines a **single subnet** inside the previously created VPC.
-# In GCP, a subnet lives within exactly one region and is assigned a specific CIDR block.
+# ==============================================================================
+# Subnet: Active Directory Subnet
+# ------------------------------------------------------------------------------
+# Defines a regional subnet inside the custom VPC.
+# - Subnets are regional resources in GCP.
+# - Each subnet has a unique CIDR block within the VPC.
+# - All VM instances launched in this subnet draw IPs from this range.
+# ==============================================================================
 
 resource "google_compute_subnetwork" "ad_subnet" {
 
-  # Name of the subnet — this must be unique within the parent VPC.
-
+  # ---------------------------------------------------------------------------
+  # Subnet Name
+  # ---------------------------------------------------------------------------
+  # Must be unique within the VPC.
   name = "ad-subnet"
 
-  # The region where this subnet will exist.
-  # This must match the region(s) where you plan to deploy resources like VMs or Managed AD.
-
+  # ---------------------------------------------------------------------------
+  # Region
+  # ---------------------------------------------------------------------------
+  # Must match the region where AD VMs and related resources will run.
   region = "us-central1"
 
-  # This ties the subnet directly to the `ad_vpc` network defined above.
-  # The `.id` returns the full self-link identifier for the VPC (projects/<project-id>/global/networks/ad-vpc).
-
+  # ---------------------------------------------------------------------------
+  # Parent VPC Association
+  # ---------------------------------------------------------------------------
+  # Links this subnet to the custom AD VPC.
+  # .id returns the fully qualified self-link.
   network = google_compute_network.ad_vpc.id
 
-  # Defines the IPv4 address range for this subnet in standard CIDR notation.
-  # This range must:
-  # - Be within the overall range of the VPC (if it's restricted by an org policy or other means)
-  # - NOT overlap with any other subnet in the VPC
-  # - Be large enough to accommodate the resources you want to place in the subnet
-
+  # ---------------------------------------------------------------------------
+  # IP Range (CIDR)
+  # ---------------------------------------------------------------------------
+  # Defines the IPv4 address space for this subnet.
+  # Requirements:
+  #   - Must not overlap with other subnets in the VPC.
+  #   - Must be large enough for AD, supporting VMs, and growth.
   ip_cidr_range = "10.1.0.0/24"
 }
 
-# ----------------------------------------------------
-# Cloud Router for the AD VPC
-# ----------------------------------------------------
+# ==============================================================================
+# Cloud Router
+# ------------------------------------------------------------------------------
+# Required for Cloud NAT.
+# - Acts as the control-plane resource for dynamic routing.
+# - Must exist in the same region as the subnet/NAT configuration.
+# ==============================================================================
+
 resource "google_compute_router" "ad_router" {
-  name    = "ad-router"
+
+  # Router name (unique per region in the project)
+  name = "ad-router"
+
+  # Attach router to the AD VPC
   network = google_compute_network.ad_vpc.id
-  region  = "us-central1"
+
+  # Region must match subnet region
+  region = "us-central1"
 }
 
-# ----------------------------------------------------
-# Cloud NAT for outbound internet (no public IP needed)
-# ----------------------------------------------------
+# ==============================================================================
+# Cloud NAT (Outbound Internet Without Public IPs)
+# ------------------------------------------------------------------------------
+# Enables instances in private subnets to access the internet:
+#   - OS package updates
+#   - External repositories
+#   - API calls
+# Without assigning public IP addresses to the VMs.
+#
+# This is ideal for:
+#   - Domain Controllers
+#   - Internal infrastructure services
+#   - Secure enterprise deployments
+# ==============================================================================
+
 resource "google_compute_router_nat" "ad_nat" {
-  name   = "ad-nat"
+
+  # NAT resource name
+  name = "ad-nat"
+
+  # Associate NAT with the Cloud Router
   router = google_compute_router.ad_router.name
+
+  # Must match router region
   region = google_compute_router.ad_router.region
 
-  nat_ip_allocate_option             = "AUTO_ONLY"
+  # ---------------------------------------------------------------------------
+  # NAT IP Allocation
+  # ---------------------------------------------------------------------------
+  # AUTO_ONLY = GCP automatically allocates ephemeral external IPs for NAT.
+  nat_ip_allocate_option = "AUTO_ONLY"
+
+  # ---------------------------------------------------------------------------
+  # Source Subnet Scope
+  # ---------------------------------------------------------------------------
+  # Applies NAT to all subnets and all IP ranges in this VPC.
   source_subnetwork_ip_ranges_to_nat = "ALL_SUBNETWORKS_ALL_IP_RANGES"
 
+  # ---------------------------------------------------------------------------
+  # Logging Configuration
+  # ---------------------------------------------------------------------------
+  # Enables NAT flow logging for troubleshooting and auditing.
   log_config {
     enable = true
     filter = "ALL"
