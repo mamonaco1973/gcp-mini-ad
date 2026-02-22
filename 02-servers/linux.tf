@@ -35,7 +35,7 @@ resource "random_string" "vm_suffix" {
 resource "google_compute_firewall" "allow_ssh" {
 
   name    = "allow-ssh" # Rule name (unique within the VPC).
-  network = "mini-ad-vpc"    # VPC network this rule applies to.
+  network = var.vpc_name
 
   # ----------------------------------------------------------------------------
   # Allow inbound SSH
@@ -90,8 +90,8 @@ resource "google_compute_instance" "linux_ad_instance" {
   # Network interface: VPC + subnet + ephemeral public IP
   # ----------------------------------------------------------------------------
   network_interface {
-    network    = "mini-ad-vpc"
-    subnetwork = "ad-subnet"
+    network    = var.vpc_name
+    subnetwork = var.subnet_name
 
     # Enables an ephemeral public IP for direct SSH access.
     access_config {}

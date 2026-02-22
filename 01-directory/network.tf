@@ -30,7 +30,7 @@ resource "google_compute_network" "ad_vpc" {
   # ---------------------------------------------------------------------------
   # Must be unique within the project.
   # Referenced by subnets, routers, firewall rules, and VM NICs.
-  name = "mini-ad-vpc"
+  name = var.vpc_name
 
   # ---------------------------------------------------------------------------
   # Disable Auto Subnets
@@ -55,7 +55,7 @@ resource "google_compute_subnetwork" "ad_subnet" {
   # Subnet Name
   # ---------------------------------------------------------------------------
   # Must be unique within the VPC.
-  name = "ad-subnet"
+  name = var.subnet_name
 
   # ---------------------------------------------------------------------------
   # Region
