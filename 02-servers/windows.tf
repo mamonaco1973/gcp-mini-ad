@@ -62,7 +62,7 @@ resource "google_secret_manager_secret_version" "admin_secret_version" {
 resource "google_compute_firewall" "allow_rdp" {
 
   name    = "allow-rdp" # Rule name (unique within the VPC).
-  network = "ad-vpc"    # VPC network this rule applies to.
+  network = "mini-ad-vpc"    # VPC network this rule applies to.
 
   # ----------------------------------------------------------------------------
   # Allow inbound RDP
