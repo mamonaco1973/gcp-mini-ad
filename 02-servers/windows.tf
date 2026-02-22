@@ -119,7 +119,7 @@ resource "google_compute_instance" "windows_ad_instance" {
   # Network interface: VPC + subnet + ephemeral public IP
   # ----------------------------------------------------------------------------
   network_interface {
-    network    = "ad-vpc"
+    network    = "mini-ad-vpc"
     subnetwork = "ad-subnet"
 
     # Enables an ephemeral public IP for direct RDP access.
