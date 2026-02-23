@@ -47,10 +47,10 @@ locals {
 # ==============================================================================
 
 data "google_compute_network" "ad_vpc" {
-  name = "mini-ad-vpc" # Existing VPC name.
+  name = var.vpc_name
 }
 
 data "google_compute_subnetwork" "ad_subnet" {
-  name   = "ad-subnet"   # Existing subnet name.
+  name   = var.subnet_name
   region = "us-central1" # Region where the subnet exists.
 }
