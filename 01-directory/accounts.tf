@@ -31,7 +31,7 @@
 resource "random_password" "admin_password" {
   length           = 24
   special          = true
-  override_special = "-_"
+  override_special = "_."
 }
 
 # ------------------------------------------------------------------------------
