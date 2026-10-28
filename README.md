@@ -1,161 +1,159 @@
-# GCP Mini Active Directory  
+# Mini Active Directory on GCP
 
-This project is a follow-up to our full **Google Cloud Managed Microsoft AD** project. While managed AD services are well-suited for production, they can be expensive for prototyping and require long provisioning times. The **“mini-AD”** approach provides a faster, lower-cost alternative that delivers a fully functional Active Directory environment that builds much quicker.  
+A small, fast, low-cost **Active Directory** domain for labs: a **Samba 4**
+domain controller on one Compute Engine VM, built much more quickly than
+Managed Service for Microsoft Active Directory, with a Linux and a Windows VM
+that join the domain at boot. It's the follow-up to our Google Cloud Managed
+Microsoft AD project, and the base that the other GCP mini-AD projects build
+on. Not for production.
 
-Using **Terraform, Samba 4, and automated configuration scripts**, this deployment provisions an **Ubuntu-based Compute Engine VM** that serves as both a **Domain Controller and DNS server**. It integrates into a custom **Google Cloud VPC** with private subnets, **firewall rules** for AD/DC traffic, and **Secret Manager** for secure credential storage.  
+| Piece | Where | Role |
+|---|---|---|
+| **mini-AD** (Samba DC) | `mini-ad-subnet` (10.1.0.0/24), no public IP | domain `mcloud.mikecloud.com` / `MCLOUD`: users, groups, POSIX IDs, DNS, Kerberos; built by [`module-gcp-mini-ad`](https://github.com/mamonaco1973/module-gcp-mini-ad) |
+| **linux-ad VM** | `mini-ad-subnet`, public IP | Ubuntu 24.04, `e2-medium`; joins with `realm` and SSSD; SSH with AD passwords |
+| **win-ad VM** | `mini-ad-subnet`, public IP | Windows Server 2022, `e2-standard-2`; joins the domain; RSAT for managing users |
+| **Secret Manager** | global | `admin-ad-credentials-mini` and `<user>-ad-credentials-mini` |
+| **Cloud NAT** | `us-central1` | outbound internet for the DC |
 
-Once the infrastructure is deployed, additional **Windows and Linux VMs** are provisioned into the same VPC and automatically joined to the domain at boot. The join process is handled by custom scripts (`ad_join.ps1` for Windows and `ad_join.sh` for Linux) that configure authentication and domain integration.  
+## Architecture
 
-This solution is ideal for **labs, demos, and development environments** where Active Directory integration is needed without the cost and provisioning time of Google Managed Microsoft AD. It is **not intended for production use**, but provides a complete, repeatable environment for testing AD-connected workloads in GCP.  
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="architecture-dark.svg">
+  <img alt="A Samba 4 domain controller with no public IP runs in mini-ad-subnet and reaches the internet through Cloud NAT. An Ubuntu VM and a Windows Server 2022 VM in the same subnet, both with public IPs, read the AD admin password from Secret Manager at boot and join the domain, the Linux one with realm and SSSD. An SSH client reaches the Linux VM and an RDP client the Windows one, signing in with AD accounts." src="architecture-light.svg">
+</picture>
 
-See the `Limitations` section for a list of caveats.  
+Regenerate with `python3 make_diagram.py`.
 
-![GCP diagram](gcp-mini-directory.png)  
+- **`01-directory/`**: the VPC (`mini-ad-vpc`) with `mini-ad-subnet`, Cloud
+  Router and Cloud NAT, the AD passwords in Secret Manager, and the DC, with
+  users and POSIX attributes from `scripts/users.json.template`.
+- **`02-servers/`**: the Linux and Windows VMs and their firewall rules.
 
-## Limitations  
+## How the members join
 
-While the GCP mini-AD deployment provides a functional and cost-effective Active Directory environment for labs, demos, and development, it does not include many of the advanced features found in **Google Cloud Managed Microsoft AD** or a fully managed Windows Server AD deployment:  
+1. **Linux** (`ad_join.sh`, a startup script): installs SSSD and realmd,
+   reads `admin-ad-credentials-mini` from Secret Manager, and joins with
+   `realm join`. SSSD is set for short names and the POSIX IDs stored in AD;
+   SSH accepts passwords; home directories are created on first login;
+   `linux-admins` get passwordless sudo.
+2. **Windows** (`ad_join.ps1`, a Windows startup script): skips itself if
+   the VM is already joined; otherwise installs RSAT, reads the same secret,
+   joins with `Add-Computer`, adds `MCLOUD\mcloud-users` to Remote Desktop
+   Users, and reboots.
 
-### Issues Related to PaaS vs IaaS (Operational & Platform-Level)  
-- **High Availability & Multi-Region** – Managed Microsoft AD provisions redundant domain controllers across zones automatically; mini-AD is a single VM without failover.  
-- **Automated Backups & Snapshots** – Managed AD handles scheduled backups; mini-AD requires manual snapshots or custom backup workflows.  
-- **Automatic Patching** – Managed AD auto-patches Windows Server and AD services; mini-AD requires manual updates of Ubuntu, Samba, and Kerberos.  
-- **Security Hardening & Compliance** – Managed AD is pre-hardened and validated for compliance frameworks; mini-AD security depends entirely on your configuration.  
-- **24/7 Google Support** – Managed AD includes full Google Cloud support; mini-AD requires you to manage and troubleshoot all aspects yourself.  
-- **Monitoring & Metrics** – Managed AD integrates with Cloud Monitoring and Logging; mini-AD requires you to manually configure monitoring and log forwarding.  
+| User | Groups | sudo on Linux |
+|---|---|---|
+| jsmith | mcloud-users, us, linux-admins, Domain Admins | yes |
+| edavis | mcloud-users, us | no |
+| rpatel | mcloud-users, india, linux-admins, Domain Admins | yes |
+| akumar | mcloud-users, india | no |
 
-### Functional Differences (AD Feature Gaps & Compatibility)  
-- **Google Cloud Service Integration** – Managed AD integrates natively with services such as Filestore, SQL Server on GCE, and GKE; mini-AD requires additional configuration to enable these integrations.  
-- **Group Policy Objects (GPOs)** – Managed AD supports full Windows GPOs; Samba’s GPO support is limited and lacks multi-DC replication.  
-- **PowerShell AD Cmdlets** – Managed AD exposes AD Web Services for remote management; Samba mini-AD does not support native AD PowerShell cmdlets.  
-- **Kerberos Trusts with On-Prem AD** – Managed AD supports domain and forest trusts; mini-AD requires manual Kerberos/LDAP configuration, which is complex and limited.  
-- **No Google Identity (Cloud Identity / Workspace) Integration** – Mini-AD cannot integrate with Google Identity or Cloud IAM. This prevents seamless SSO, conditional access, and native identity federation with Google Workspace or IAM-controlled resources.  
+| Group | gidNumber |
+|---|---|
+| mcloud-users | 10001 |
+| us | 10002 |
+| india | 10003 |
+| linux-admins | 10004 |
+
+## What mini-AD doesn't do
+
+Compared with Managed Service for Microsoft AD, a single Samba DC on a VM
+gives up:
+
+- **Operations**: no second DC or multi-region domain, no automatic backups
+  or patching, no Google-managed hardening, support, or Cloud Monitoring
+  integration.
+- **Features**: limited GPO support without replication; no AD Web Services,
+  so many AD PowerShell cmdlets don't work; trusts with an on-premises AD
+  need manual setup.
+
+## Firewall rules
+
+```
+internet ─22──▶ linux-ad VM
+internet ─3389─▶ win-ad VM
+```
+
+| Rule | Port | Applies to |
+|---|---|---|
+| `allow-ssh` | tcp 22 | tag `allow-ssh` (linux-ad VM) |
+| `allow-rdp` | tcp 3389 | tag `allow-rdp` (win-ad VM) |
+
+Both allow `0.0.0.0/0`; every login still needs an AD account. The DC has no
+public IP.
 
 ## Prerequisites
 
 * [A Google Cloud Account](https://console.cloud.google.com/)
-* [Install gcloud CLI](https://cloud.google.com/sdk/docs/install) 
-* [Install Latest Terraform](https://developer.hashicorp.com/terraform/install)
+* [Install gcloud CLI](https://cloud.google.com/sdk/docs/install)
+* [Install Terraform](https://developer.hashicorp.com/terraform/install)
+* [Install jq](https://jqlang.github.io/jq/download/)
 
-If this is your first time watching our content, we recommend starting with this video: [GCP + Terraform: Easy Setup](https://youtu.be/3spJpYX4f7I). It provides a step-by-step guide to properly configure Terraform, Packer, and the gcloud CLI.
+Put a service account key in the repository root as `credentials.json`;
+`check_env.sh` activates it, and `api_setup.sh` enables the APIs the build
+needs. If this is your first time watching our content, we recommend
+starting with this video:
+[GCP + Terraform: Easy Setup](https://youtu.be/3spJpYX4f7I).
 
-## Download this Repository  
-
-Clone the repository from GitHub and move into the project directory:  
+## Deploy
 
 ```bash
 git clone https://github.com/mamonaco1973/gcp-mini-ad.git
 cd gcp-mini-ad
-```  
+./apply.sh       # 1: VPC + Cloud NAT + mini-AD + secrets  2: Linux and Windows VMs
+```
 
----
+Everything deploys to `us-central1`, the VMs in `us-central1-a`. After
+`apply.sh` finishes, the Linux VM needs a few minutes to join the domain, and
+the Windows VM longer, because it joins and then reboots. `apply.sh` ends by
+running `validate.sh`:
 
-## Build the Code  
+```
+============================================================================
+Mini-AD Quick Start - Validation Output (GCP)
+============================================================================
 
-Run [check_env](check_env.sh) to validate your environment, then run [apply](apply.sh) to provision the infrastructure.  
+NOTE: Windows RDP Host:      203.0.113.10
+NOTE: Linux SSH Host:        203.0.113.20
+```
 
-```bash
-develop-vm:~/gcp-mini-ad$ ./apply.sh
-NOTE: Validating that required commands are in PATH.
-NOTE: gcloud is found in the current PATH.
-NOTE: terraform is found in the current PATH.
-NOTE: All required commands are available.
-NOTE: Checking Google Cloud CLI connection.
-NOTE: Successfully authenticated with GCP.
-Initializing provider plugins...
-Terraform has been successfully initialized!
-```  
-## Build Results  
+## Try it
 
-When the deployment completes, the following resources are created:  
+1. Get a user's password:
 
-- **Networking:**  
-  - A custom VPC with private subnets for domain controller and client instances  
-  - Firewall rules that allow only the necessary AD/DC ports (LDAP, Kerberos, DNS, SMB, etc.)  
-  - Internal DNS resolution configured through the domain controller  
+   ```bash
+   gcloud secrets versions access latest --secret=jsmith-ad-credentials-mini \
+     | jq -r .password
+   ```
 
-- **Security & Identity:**  
-  - Google Cloud Secret Manager entries for administrator and user credentials  
-  - Firewall policies scoped to the domain controller and client instances  
+2. RDP to the **Windows RDP Host** as `MCLOUD\jsmith`. **Active Directory
+   Users and Computers** is installed.
 
-- **Active Directory Server:**  
-  - An Ubuntu-based Compute Engine VM running Samba 4 as both Domain Controller and DNS server  
-  - Configured Kerberos realm and NetBIOS name  
-  - Administrator credentials stored securely in Secret Manager  
-  - User and group provisioning via Terraform templates (`users.json.template`)  
+   ![Windows VM](windows.png)
 
-- **Client Instances:**  
-  - Windows VM automatically joined to the domain via [ad_join.ps1](02-servers/scripts/ad_join.ps1) at boot  
-  - Linux VM joined to the domain using [ad_join.sh](02-servers/scripts/ad_join.sh) with SSSD configuration  
-  - Both client instances authenticate against the mini-AD domain  
+3. SSH to the **Linux SSH Host** as `jsmith`. Try `id`,
+   `getent group linux-admins` and `sudo -l`.
 
-## Users and Groups
+   ![Linux VM](linux.png)
 
-As part of this project a set of **users** and **groups** are automatically created through a scripted process. These resources are intended for **testing and demonstration purposes**, showcasing how to automate user and group provisioning in a mini Active Directory environment.
+## Troubleshooting
 
-### Groups Created
+| Symptom | Fix |
+|---|---|
+| SSH rejects every AD password | The Linux VM hasn't finished joining. `sudo journalctl -u google-startup-scripts` on it shows the startup script. |
+| RDP rejects `MCLOUD\jsmith` | The Windows VM joins and then reboots; give it several minutes. Its startup script output is on the serial console: `gcloud compute instances get-serial-port-output <win-ad-vm> --zone us-central1-a`. |
+| `id <user>` finds nothing | The user needs `uidNumber`, `gidNumber` and `uid` set in AD. SSSD caches lookups; `sudo sss_cache -E` clears it. |
 
-| Group Name    | Group Category | Group Scope | gidNumber |
-|----------------|----------------|----------------|------------|
-| mcloud-users   | Security       | Universal     | 10001 |
-| india          | Security       | Universal     | 10002 |
-| us             | Security       | Universal     | 10003 |
-| linux-admins   | Security       | Universal     | 10004 |
-
-### Users Created and Group Memberships
-
-| Username | Full Name   | uidNumber | gidNumber | Groups Joined                    |
-|---------|------------|-----------|-----------|----------------------|
-| jsmith  | John Smith  | 10001 | 10001 | mcloud-users, us, linux-admins |
-| edavis  | Emily Davis | 10002 | 10001 | mcloud-users, us |
-| rpatel  | Raj Patel   | 10003 | 10001 | mcloud-users, india, linux-admins |
-| akumar  | Amit Kumar  | 10004 | 10001 | mcloud-users, india |
-
----
-
-
-### Understanding `uidNumber` and `gidNumber` for Linux Integration
-
-The **`uidNumber`** (User ID) and **`gidNumber`** (Group ID) attributes are critical when integrating **Active Directory** with **Linux systems**, particularly in environments where **SSSD** ([System Security Services Daemon](https://sssd.io/)) or similar services are used for identity management. These attributes allow Linux hosts to recognize and map Active Directory users and groups into the **POSIX** (Portable Operating System Interface) user and group model.
-
-
-### Log into Windows Instance  
-
-After the Windows instance boots, the [startup script](02-servers/scripts/ad_join.ps1) executes which does the following tasks   
-
-- Install Active Directory Administrative Tools   
-- Join EC2 Instance to Active Directory  
-- Grant RDP Access  
-- Final System Reboot  
-
-Administrator credentials are stored in the `admin_ad_credentials` secret.
-
-![Windows VM Instance](windows.png)
-
-### Log into Linux Instance  
-
-When the Linux instance boots, the [startup script](02-servers/scripts/ad_join.sh) runs the following tasks:  
-
-- Update OS and install required packages  
-- Join the Active Directory domain with SSSD  
-- Enable password authentication for AD users  
-- Configure SSSD for AD integration  
-- Grant sudo privileges to the `linux-admins` group  
-
-Linux user credentials are stored as secrets.
-
-![Linux VM Instance](linux.png) 
-
-## Clean Up  
-
-When finished, remove all resources with:  
+## Teardown
 
 ```bash
-./destroy.sh
-```  
+./destroy.sh     # destroys the VMs, then the DC, Cloud NAT, VPC and secrets
+```
 
-This uses Terraform to delete the VPC, Compute Engine instances, firewall rules, Secret Manager entries, and any other resources created by this project.  
+## Notes
 
----
-
-⚠️ **Reminder:** This project is for **labs and development only**. Do not use it in production.  
+- **Lab only.** SSH and RDP are open to the internet, jsmith and rpatel are
+  Domain Admins, the join uses the domain admin account, and the VMs run as
+  the same service account as Terraform with the `cloud-platform` scope.
+  Restrict the firewall rules and use a dedicated join account for anything
+  more.
